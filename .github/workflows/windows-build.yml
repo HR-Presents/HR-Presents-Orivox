@@ -48,13 +48,18 @@ jobs:
       - name: Verify executable exists
         shell: pwsh
         run: |
-          if (-not (Test-Path 'dist\ORIVOX.exe')) { throw 'ORIVOX.exe was not produced' }
-          Get-ChildItem 'dist\ORIVOX.exe' | Format-List Name,Length,LastWriteTime
+          if (-not (Test-Path 'dist\ORIVOX\ORIVOX.exe')) { throw 'ORIVOX.exe was not produced' }
+          Get-ChildItem 'dist\ORIVOX\ORIVOX.exe' | Format-List Name,Length,LastWriteTime
 
       - name: Smoke test packaged runtime
+        timeout-minutes: 5
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath 'dist\ORIVOX.exe' -ArgumentList '--smoke-test' -PassThru -Wait
+          $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--smoke-test' -PassThru
+          if (-not $proc.WaitForExit(240000)) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw 'Packaged ORIVOX smoke test timed out after 4 minutes'
+          }
           if ($proc.ExitCode -ne 0) { throw "Packaged ORIVOX smoke test failed with exit code $($proc.ExitCode)" }
 
       - name: Install Inno Setup
@@ -67,11 +72,7 @@ jobs:
 
       - name: Create portable ZIP
         shell: pwsh
-        run: |
-          $portableDir = 'dist\ORIVOX-Portable'
-          New-Item -ItemType Directory -Force $portableDir | Out-Null
-          Copy-Item 'dist\ORIVOX.exe' "$portableDir\ORIVOX.exe"
-          Compress-Archive -Path "$portableDir\*" -DestinationPath 'dist\ORIVOX-Windows-Portable.zip' -CompressionLevel Optimal
+        run: Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath 'dist\ORIVOX-Windows-Portable.zip' -CompressionLevel Optimal
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
