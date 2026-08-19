@@ -175,3 +175,5 @@ jobs:
           } else {
             gh release create $tag 'dist\ORIVOX-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.0.exe' --title 'HR-Presents ORIVOX v1.0.0' --notes $notes --latest
           }
+
+# main release trigger
