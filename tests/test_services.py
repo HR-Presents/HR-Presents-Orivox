@@ -1,4 +1,5 @@
 import asyncio
+import os
 import httpx
 
 from orivox.services import Runtime
@@ -29,6 +30,24 @@ class FakeAsyncClient:
         raise AssertionError(f'unexpected URL {url}')
 
 
+class FakeSegment:
+    def __init__(self, text):
+        self.text = text
+
+
+class FakeWhisperModel:
+    def __init__(self):
+        self.seen_path = None
+        self.seen_bytes = None
+
+    def transcribe(self, path, vad_filter=True):
+        self.seen_path = path
+        with open(path, 'rb') as f:
+            self.seen_bytes = f.read()
+        assert vad_filter is True
+        return [FakeSegment('hello'), FakeSegment('world')], None
+
+
 def test_chat_auto_pulls_missing_model(monkeypatch):
     FakeAsyncClient.calls = []
     monkeypatch.setattr('orivox.services.httpx.AsyncClient', FakeAsyncClient)
@@ -44,3 +63,17 @@ def test_chat_auto_pulls_missing_model(monkeypatch):
         'http://127.0.0.1:11434/api/chat',
     ]
     assert runtime.status['ai'] == 'ready'
+
+
+def test_transcribe_browser_webm_uses_temp_file(monkeypatch):
+    runtime = Runtime()
+    model = FakeWhisperModel()
+    monkeypatch.setattr(runtime, 'load_whisper', lambda: model)
+    webm = b'\x1a\x45\xdf\xa3' + b'fake-webm-payload'
+
+    text = asyncio.run(runtime.transcribe(webm))
+
+    assert text == 'hello world'
+    assert model.seen_bytes == webm
+    assert model.seen_path.endswith('.webm')
+    assert not os.path.exists(model.seen_path)

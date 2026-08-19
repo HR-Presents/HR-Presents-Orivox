@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import asyncio
 import httpx
 
@@ -26,19 +28,45 @@ class Runtime:
         self.status["whisper"] = "ready"
         return self.whisper
 
+    @staticmethod
+    def _audio_suffix(data: bytes) -> str:
+        if data.startswith(b"\x1a\x45\xdf\xa3"):
+            return ".webm"
+        if data.startswith(b"OggS"):
+            return ".ogg"
+        if data.startswith(b"RIFF"):
+            return ".wav"
+        if len(data) >= 12 and data[4:8] == b"ftyp":
+            return ".m4a"
+        return ".audio"
+
     async def transcribe(self, data: bytes):
-        # Keep NumPy, SoundFile and Whisper out of the desktop startup path.
-        # These libraries load sizeable native runtimes on Windows and are only
-        # required once the user actually records audio.
-        import numpy as np
-        import soundfile as sf
+        """Transcribe browser-recorded audio with Whisper/PyAV.
+
+        Browser MediaRecorder output is normally WebM/Opus on Chrome/Edge.
+        SoundFile/libsndfile cannot reliably decode that container on Windows,
+        while faster-whisper's PyAV decoder can.  Write the uploaded bytes to a
+        temporary file so Whisper can decode the original browser container.
+        """
+        if not data:
+            raise ValueError("No audio data received")
 
         model = await asyncio.to_thread(self.load_whisper)
-        audio, _ = sf.read(io.BytesIO(data), dtype="float32")
-        if getattr(audio, "ndim", 1) > 1:
-            audio = np.mean(audio, axis=1)
-        segs, _ = await asyncio.to_thread(model.transcribe, audio, vad_filter=True)
-        return " ".join(s.text.strip() for s in segs).strip()
+        temp_path = None
+        try:
+            suffix = self._audio_suffix(data)
+            with tempfile.NamedTemporaryFile(prefix="orivox-recording-", suffix=suffix, delete=False) as f:
+                f.write(data)
+                temp_path = f.name
+
+            segs, _ = await asyncio.to_thread(model.transcribe, temp_path, vad_filter=True)
+            return " ".join(s.text.strip() for s in segs).strip()
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
     @staticmethod
     def _ollama_error(response: httpx.Response) -> str:
