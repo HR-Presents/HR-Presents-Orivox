@@ -6,10 +6,11 @@ ORIVOX is a local-first voice assistant by **HR-Presents**. Its real runtime pip
 
 ## Architecture
 
-- `orivox/app.py` — FastAPI application/API
+- `orivox/app.py` — FastAPI application/API and web-client serving
 - `orivox/db.py` — SQLite users, conversations, messages and settings
 - `orivox/services.py` — lazy-loaded Whisper, local LLM and Kokoro runtime
 - `orivox/config.py` — portable environment-aware configuration
+- `web/` — responsive light/dark ORIVOX application client
 - `run.py` — local launcher
 
 The code deliberately separates STT, conversational AI and TTS so models can be upgraded independently.
@@ -27,16 +28,24 @@ ollama pull qwen2.5:3b
 python run.py
 ```
 
-Open `http://127.0.0.1:8765/docs` for the API while the full desktop/web client is being integrated.
+Open `http://127.0.0.1:8765` to use ORIVOX.
 
 Models and the database are stored under `%LOCALAPPDATA%\ORIVOX` by default, never under a developer-specific path. Override with `ORIVOX_DATA_DIR`, `ORIVOX_MODEL_DIR`, `ORIVOX_DB_PATH`, `ORIVOX_WHISPER_MODEL`, `ORIVOX_LLM_MODEL`, `ORIVOX_OLLAMA_URL`, or `ORIVOX_PORT`.
 
+## Implemented application workflow
+
+The current build includes real local registration/login, profile updates, persistent settings, dashboard status, dynamic conversation history, text chat, browser microphone capture, live microphone-derived visualization, Whisper transcription, local conversational AI, Kokoro speech synthesis, audio playback, interruption/stop controls, new conversations, conversation reopening/deletion, responsive navigation, notifications, and persistent light/dark/system appearance.
+
 ## Privacy
 
-Core speech recognition, conversation generation and speech synthesis are designed to execute locally. ORIVOX does not require cloud transcription for its basic pipeline. Raw microphone recordings are not persisted by the API.
+Core speech recognition, conversation generation and speech synthesis are designed to execute locally. ORIVOX does not require cloud transcription for its basic pipeline. Raw microphone recordings are not persisted by the backend in the current implementation.
 
-## Current implementation status
+## Testing
 
-This branch establishes the real backend foundation: hashed local accounts, SQLite persistence, dynamic history, Faster-Whisper transcription, Ollama-backed local AI, Kokoro synthesis, model status and portable configuration. The branded responsive client, settings/profile CRUD, installer assets and end-to-end packaged Windows validation must be completed and tested before ORIVOX is called production-complete.
+GitHub Actions runs Windows smoke tests for application import/compilation, the web client, registration/login, profile persistence, settings persistence, and empty-audio validation. Full microphone → Whisper → AI → Kokoro → physical speaker validation still requires a real Windows audio device and installed local models.
+
+## Remaining release work
+
+Before ORIVOX is called production-complete, the supplied official ORIVOX logo must be committed as final web/desktop/installer assets, founder/developer links must be verified from the Sentrix product metadata, the desktop application/installer must be packaged, model installation UX must be finalized, and the complete workflow must be exercised on a real Windows machine with microphone and speaker hardware.
 
 Copyright (c) 2026 **HR-Presents**. All rights reserved.
