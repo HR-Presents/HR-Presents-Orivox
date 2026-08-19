@@ -40,15 +40,86 @@ class Runtime:
         segs, _ = await asyncio.to_thread(model.transcribe, audio, vad_filter=True)
         return " ".join(s.text.strip() for s in segs).strip()
 
+    @staticmethod
+    def _ollama_error(response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("error"):
+                return str(payload["error"])
+        except Exception:
+            pass
+        return response.text.strip() or f"HTTP {response.status_code}"
+
+    async def _pull_ollama_model(self, client: httpx.AsyncClient, model: str) -> None:
+        self.status["ai"] = "downloading"
+        try:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/pull",
+                json={"name": model, "stream": False},
+                timeout=1800,
+            )
+        except httpx.ConnectError as exc:
+            self.status["ai"] = "unavailable"
+            raise RuntimeError(
+                "The local AI engine is not running. Start Ollama, then reopen ORIVOX."
+            ) from exc
+        except httpx.TimeoutException as exc:
+            self.status["ai"] = "unavailable"
+            raise RuntimeError(
+                f"Timed out while downloading the local AI model '{model}'. Check your internet connection and try again."
+            ) from exc
+
+        if response.is_error:
+            self.status["ai"] = "unavailable"
+            raise RuntimeError(
+                f"Could not download local AI model '{model}': {self._ollama_error(response)}"
+            )
+        self.status["ai"] = "ready"
+
     async def chat(self, messages, model=OLLAMA_MODEL):
         async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={"model": model, "messages": messages, "stream": False},
-            )
-            response.raise_for_status()
+            try:
+                response = await client.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={"model": model, "messages": messages, "stream": False},
+                )
+            except httpx.ConnectError as exc:
+                self.status["ai"] = "unavailable"
+                raise RuntimeError(
+                    "The local AI engine is not running. Start Ollama, then reopen ORIVOX."
+                ) from exc
+            except httpx.TimeoutException as exc:
+                self.status["ai"] = "unavailable"
+                raise RuntimeError("The local AI model took too long to respond.") from exc
+
+            # Ollama returns 404 when the requested model is not installed.
+            # Provision the configured local model automatically on first use,
+            # then retry the original chat request once.
+            if response.status_code == 404:
+                error_text = self._ollama_error(response)
+                if "model" in error_text.lower() and (
+                    "not found" in error_text.lower() or "does not exist" in error_text.lower()
+                ):
+                    await self._pull_ollama_model(client, model)
+                    response = await client.post(
+                        f"{OLLAMA_URL}/api/chat",
+                        json={"model": model, "messages": messages, "stream": False},
+                        timeout=120,
+                    )
+
+            if response.is_error:
+                self.status["ai"] = "unavailable"
+                raise RuntimeError(
+                    f"Local AI request failed: {self._ollama_error(response)}"
+                )
+
+            payload = response.json()
+            content = payload.get("message", {}).get("content", "").strip()
+            if not content:
+                self.status["ai"] = "unavailable"
+                raise RuntimeError("The local AI model returned an empty response.")
             self.status["ai"] = "ready"
-            return response.json()["message"]["content"]
+            return content
 
     def load_kokoro(self):
         if self.kokoro:
