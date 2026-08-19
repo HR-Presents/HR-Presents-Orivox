@@ -101,6 +101,32 @@ jobs:
             Get-Process 'ORIVOX-server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Add portable launcher instructions
+        shell: pwsh
+        run: |
+          @'
+          HR-Presents ORIVOX — Windows Portable
+
+          1. Extract this ZIP completely.
+          2. Open the extracted ORIVOX folder.
+          3. Double-click ORIVOX.exe.
+          4. ORIVOX runs locally on your computer. No installer is required.
+
+          Keep all files in this folder together; ORIVOX-server.exe and the bundled runtime are required by ORIVOX.exe.
+          '@ | Set-Content -Path 'dist\ORIVOX\README-FIRST.txt' -Encoding UTF8
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath 'dist\ORIVOX-Windows-Portable.zip' -CompressionLevel Optimal
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORIVOX-Windows-Portable
+          if-no-files-found: error
+          retention-days: 14
+          path: dist/ORIVOX-Windows-Portable.zip
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
@@ -109,16 +135,10 @@ jobs:
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ORIVOX.iss'
 
-      - name: Create portable ZIP
-        shell: pwsh
-        run: Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath 'dist\ORIVOX-Windows-Portable.zip' -CompressionLevel Optimal
-
-      - name: Upload Windows packages
+      - name: Upload optional installer
         uses: actions/upload-artifact@v4
         with:
-          name: ORIVOX-Windows
+          name: ORIVOX-Windows-Installer
           if-no-files-found: error
           retention-days: 14
-          path: |
-            dist/ORIVOX-Windows-Portable.zip
-            dist/installer/ORIVOX-Setup-1.0.0.exe
+          path: dist/installer/ORIVOX-Setup-1.0.0.exe
