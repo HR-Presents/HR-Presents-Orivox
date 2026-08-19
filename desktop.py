@@ -4,7 +4,6 @@ import threading
 import time
 import webbrowser
 
-import httpx
 import uvicorn
 
 from orivox.app import app
@@ -26,13 +25,19 @@ def _run_server(server: uvicorn.Server) -> None:
     server.run()
 
 
-def _smoke_test(url: str) -> None:
-    with httpx.Client(timeout=10.0) as client:
-        home = client.get(url)
+def _smoke_test() -> None:
+    """Validate the frozen app and bundled web/API routes without starting a
+    long-lived uvicorn thread, avoiding Windows shutdown hangs in CI.
+    """
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        home = client.get("/")
         home.raise_for_status()
         if "ORIVOX" not in home.text:
             raise RuntimeError("Packaged web client did not render ORIVOX branding")
-        status = client.get(f"{url}/api/status")
+
+        status = client.get("/api/status")
         status.raise_for_status()
         payload = status.json()
         if "version" not in payload or "models" not in payload:
@@ -42,8 +47,12 @@ def _smoke_test(url: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="HR-Presents ORIVOX desktop launcher")
     parser.add_argument("--browser", action="store_true", help="Use the system browser instead of an embedded desktop window")
-    parser.add_argument("--smoke-test", action="store_true", help="Start the packaged app, verify its local web/API runtime, then exit")
+    parser.add_argument("--smoke-test", action="store_true", help="Verify the packaged app and bundled web/API runtime, then exit")
     args = parser.parse_args()
+
+    if args.smoke_test:
+        _smoke_test()
+        return 0
 
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning", access_log=False)
     server = uvicorn.Server(config)
@@ -56,15 +65,6 @@ def main() -> int:
         raise RuntimeError("ORIVOX local server failed to start")
 
     url = f"http://{HOST}:{PORT}"
-
-    if args.smoke_test:
-        try:
-            _smoke_test(url)
-            print("ORIVOX packaged runtime smoke test passed")
-            return 0
-        finally:
-            server.should_exit = True
-            thread.join(timeout=5)
 
     if args.browser:
         webbrowser.open(url)
