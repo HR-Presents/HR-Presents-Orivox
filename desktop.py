@@ -36,8 +36,6 @@ def _load_runtime():
     import uvicorn
     _trace("uvicorn imported")
 
-    # Import ORIVOX modules individually so frozen Windows startup failures are
-    # both minimized and precisely visible in the CI startup trace.
     _trace("importing ORIVOX config")
     from orivox.config import HOST, PORT, APP_NAME
     _trace("ORIVOX config imported")
@@ -55,6 +53,29 @@ def _load_runtime():
     _trace("ORIVOX app imported")
     _trace("runtime imports complete")
     return uvicorn, app, HOST, PORT, APP_NAME
+
+
+def _build_server(uvicorn, app, host: str, port: int):
+    # Frozen Windows executables are more reliable when Uvicorn is told
+    # exactly which event loop and HTTP implementation to use.  Avoid the
+    # auto selectors, which can import optional uvloop/httptools paths that
+    # are unnecessary for ORIVOX's local-only server.
+    _trace("creating uvicorn config")
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level="warning",
+        access_log=False,
+        loop="asyncio",
+        http="h11",
+        ws="none",
+        lifespan="off",
+    )
+    _trace("uvicorn config created")
+    server = uvicorn.Server(config)
+    _trace("uvicorn server created")
+    return server
 
 
 def _run_server(server) -> None:
@@ -104,8 +125,7 @@ def main() -> int:
         _smoke_test(app)
         return 0
 
-    config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning", access_log=False)
-    server = uvicorn.Server(config)
+    server = _build_server(uvicorn, app, HOST, PORT)
     url = f"http://{HOST}:{PORT}"
 
     if args.browser:
@@ -121,6 +141,9 @@ def main() -> int:
             server.run()
         except KeyboardInterrupt:
             pass
+        except Exception as exc:
+            _trace(f"main-thread uvicorn failed: {exc!r}")
+            raise
         finally:
             server.should_exit = True
         _trace("main-thread uvicorn stopped")
