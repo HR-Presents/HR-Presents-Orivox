@@ -51,6 +51,12 @@ jobs:
           if (-not (Test-Path 'dist\ORIVOX\ORIVOX.exe')) { throw 'ORIVOX.exe was not produced' }
           Get-ChildItem 'dist\ORIVOX\ORIVOX.exe' | Format-List Name,Length,LastWriteTime
 
+      - name: Smoke test packaged runtime
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($proc.ExitCode -ne 0) { throw "Packaged ORIVOX smoke test failed with exit code $($proc.ExitCode)" }
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
