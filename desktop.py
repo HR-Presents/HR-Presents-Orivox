@@ -56,10 +56,9 @@ def _load_runtime():
 
 
 def _build_server(uvicorn, app, host: str, port: int):
-    # In a PyInstaller windowed executable stdout/stderr may not behave like a
-    # normal console. Uvicorn's default logging configuration is applied from
-    # Config.__init__ and can block in that environment. Keep the local server
-    # deliberately minimal and let ORIVOX write diagnostics through _trace.
+    # Windowed PyInstaller executables do not provide normal stdout/stderr.
+    # Keep Uvicorn logging disabled and select the concrete asyncio/httptools
+    # stack so no runtime auto-detection occurs after the socket is opened.
     _trace("creating uvicorn config")
     config = uvicorn.Config(
         app,
@@ -70,7 +69,7 @@ def _build_server(uvicorn, app, host: str, port: int):
         access_log=False,
         use_colors=False,
         loop="asyncio",
-        http="h11",
+        http="httptools",
         ws="none",
         lifespan="off",
         reload=False,
