@@ -56,21 +56,25 @@ def _load_runtime():
 
 
 def _build_server(uvicorn, app, host: str, port: int):
-    # Frozen Windows executables are more reliable when Uvicorn is told
-    # exactly which event loop and HTTP implementation to use.  Avoid the
-    # auto selectors, which can import optional uvloop/httptools paths that
-    # are unnecessary for ORIVOX's local-only server.
+    # In a PyInstaller windowed executable stdout/stderr may not behave like a
+    # normal console. Uvicorn's default logging configuration is applied from
+    # Config.__init__ and can block in that environment. Keep the local server
+    # deliberately minimal and let ORIVOX write diagnostics through _trace.
     _trace("creating uvicorn config")
     config = uvicorn.Config(
         app,
         host=host,
         port=port,
+        log_config=None,
         log_level="warning",
         access_log=False,
+        use_colors=False,
         loop="asyncio",
         http="h11",
         ws="none",
         lifespan="off",
+        reload=False,
+        workers=1,
     )
     _trace("uvicorn config created")
     server = uvicorn.Server(config)
