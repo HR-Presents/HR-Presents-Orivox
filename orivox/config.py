@@ -12,5 +12,14 @@ WHISPER_MODEL = os.getenv("ORIVOX_WHISPER_MODEL", "base.en")
 OLLAMA_URL = os.getenv("ORIVOX_OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("ORIVOX_LLM_MODEL", "qwen2.5:3b")
 KOKORO_VOICE = os.getenv("ORIVOX_KOKORO_VOICE", "af_heart")
-for p in (DATA_DIR, MODEL_DIR):
-    p.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_data_dirs() -> None:
+    """Create writable ORIVOX data/model directories only when they are needed.
+
+    Keeping filesystem mutation out of module import makes the frozen Windows
+    launcher deterministic and prevents startup from blocking on profile/path
+    initialization before the local server can bind.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
