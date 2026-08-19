@@ -72,8 +72,11 @@ jobs:
         env:
           ORIVOX_NO_BROWSER: '1'
           ORIVOX_STARTUP_LOG: ${{ runner.temp }}\orivox-startup.log
+          ORIVOX_DATA_DIR: ${{ runner.temp }}\orivox-packaged-data
+          ORIVOX_DB_PATH: ${{ runner.temp }}\orivox-packaged-data\orivox.db
         run: |
           Remove-Item $env:ORIVOX_STARTUP_LOG -ErrorAction SilentlyContinue
+          Remove-Item $env:ORIVOX_DATA_DIR -Recurse -Force -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--browser' -PassThru
           try {
             $deadline = (Get-Date).AddMinutes(4)
@@ -94,6 +97,23 @@ jobs:
                 $status = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/status' -TimeoutSec 3
                 if (-not $status.version -or -not $status.models) { throw 'Status endpoint validation failed' }
 
+                $email = "packaged-$([guid]::NewGuid().ToString('N'))@orivox.local"
+                $registerBody = @{ name = 'Packaged Test'; email = $email; password = 'StrongPass123' } | ConvertTo-Json
+                $registered = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/auth/register' -Method Post -ContentType 'application/json' -Body $registerBody -TimeoutSec 10
+                if (-not $registered.id -or $registered.email -ne $email) { throw 'Packaged registration validation failed' }
+
+                $loginBody = @{ email = $email; password = 'StrongPass123' } | ConvertTo-Json
+                $loggedIn = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/auth/login' -Method Post -ContentType 'application/json' -Body $loginBody -TimeoutSec 10
+                if (-not $loggedIn.id -or $loggedIn.email -ne $email) { throw 'Packaged login validation failed' }
+
+                $uid = $loggedIn.id
+                $session = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/auth/session/$uid" -TimeoutSec 5
+                if ($session.id -ne $uid) { throw 'Packaged session validation failed' }
+
+                $settingsBody = @{ values = @{ theme = 'dark'; voice = 'af_heart'; speed = '1.1' } } | ConvertTo-Json -Depth 4
+                $savedSettings = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/settings/$uid" -Method Put -ContentType 'application/json' -Body $settingsBody -TimeoutSec 10
+                if ($savedSettings.theme -ne 'dark') { throw 'Packaged settings persistence failed' }
+
                 $ready = $true
                 break
               } catch {
@@ -105,9 +125,9 @@ jobs:
               Write-Host "Last packaged probe error: $lastError"
               Write-Host '--- ORIVOX packaged startup trace ---'
               if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG } else { Write-Host 'No startup trace was produced' }
-              throw 'Packaged ORIVOX did not become healthy within 4 minutes'
+              throw 'Packaged ORIVOX did not pass the end-to-end local runtime checks within 4 minutes'
             }
-            Write-Host 'Packaged ORIVOX runtime smoke test passed'
+            Write-Host 'Packaged ORIVOX runtime and auth/database smoke tests passed'
             if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
