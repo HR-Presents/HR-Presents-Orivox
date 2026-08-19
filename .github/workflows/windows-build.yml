@@ -7,6 +7,7 @@ on:
       - 'orivox/**'
       - 'web/**'
       - 'desktop.py'
+      - 'server.py'
       - 'ORIVOX.spec'
       - 'requirements*.txt'
       - 'installer/**'
@@ -37,7 +38,7 @@ jobs:
           python -m pip install -r requirements-desktop.txt
 
       - name: Compile Python sources
-        run: python -m compileall -q orivox desktop.py run.py tests
+        run: python -m compileall -q orivox desktop.py server.py run.py tests
 
       - name: Run application smoke tests
         run: python -m pytest -q
@@ -45,11 +46,12 @@ jobs:
       - name: Build ORIVOX desktop bundle
         run: python -m PyInstaller --noconfirm --clean ORIVOX.spec
 
-      - name: Verify executable exists
+      - name: Verify executables exist
         shell: pwsh
         run: |
           if (-not (Test-Path 'dist\ORIVOX\ORIVOX.exe')) { throw 'ORIVOX.exe was not produced' }
-          Get-ChildItem 'dist\ORIVOX\ORIVOX.exe' | Format-List Name,Length,LastWriteTime
+          if (-not (Test-Path 'dist\ORIVOX\ORIVOX-server.exe')) { throw 'ORIVOX-server.exe was not produced' }
+          Get-ChildItem 'dist\ORIVOX\ORIVOX*.exe' | Format-Table Name,Length,LastWriteTime
 
       - name: Smoke test packaged runtime
         timeout-minutes: 5
@@ -88,6 +90,7 @@ jobs:
             if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Get-Process 'ORIVOX-server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
 
       - name: Install Inno Setup
