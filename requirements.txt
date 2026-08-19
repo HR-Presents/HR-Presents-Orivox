@@ -1,0 +1,13 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+sqlalchemy==2.0.43
+pydantic==2.11.7
+python-multipart==0.0.20
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+itsdangerous==2.2.0
+faster-whisper==1.1.1
+kokoro>=0.9.4
+soundfile>=0.13.1
+numpy>=1.26.4
+httpx>=0.28.1
