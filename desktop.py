@@ -34,10 +34,25 @@ def _server_ready(host: str, port: int, timeout: float = 30.0) -> bool:
 def _load_runtime():
     _trace("importing uvicorn")
     import uvicorn
-    _trace("importing ORIVOX app")
-    from orivox.app import app
+    _trace("uvicorn imported")
+
+    # Import ORIVOX modules individually so frozen Windows startup failures are
+    # both minimized and precisely visible in the CI startup trace.
     _trace("importing ORIVOX config")
     from orivox.config import HOST, PORT, APP_NAME
+    _trace("ORIVOX config imported")
+
+    _trace("importing ORIVOX database module")
+    import orivox.db  # noqa: F401
+    _trace("ORIVOX database module imported")
+
+    _trace("importing ORIVOX services module")
+    import orivox.services  # noqa: F401
+    _trace("ORIVOX services module imported")
+
+    _trace("importing ORIVOX app")
+    from orivox.app import app
+    _trace("ORIVOX app imported")
     _trace("runtime imports complete")
     return uvicorn, app, HOST, PORT, APP_NAME
 
@@ -94,9 +109,6 @@ def main() -> int:
     url = f"http://{HOST}:{PORT}"
 
     if args.browser:
-        # In browser/CI mode, keep Uvicorn on the main thread. This avoids
-        # frozen-Windows event-loop/thread startup issues and mirrors a normal
-        # standalone ASGI server lifecycle.
         opener = threading.Thread(
             target=_open_browser_when_ready,
             args=(HOST, PORT, url),
@@ -114,8 +126,6 @@ def main() -> int:
         _trace("main-thread uvicorn stopped")
         return 0
 
-    # Embedded desktop mode needs the native webview event loop on the main
-    # thread, so Uvicorn runs in the background only for this mode.
     thread = threading.Thread(target=_run_server, args=(server,), daemon=True, name="orivox-local-server")
     thread.start()
 
