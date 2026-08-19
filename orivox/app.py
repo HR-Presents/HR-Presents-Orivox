@@ -1,8 +1,8 @@
+import mimetypes
 import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .config import OLLAMA_MODEL, VERSION
@@ -48,8 +48,6 @@ class Speech(BaseModel):
 
 
 def _db_symbols():
-    # SQLAlchemy and SQLite are intentionally imported only when an endpoint
-    # needs persistent data. This keeps the frozen desktop startup path light.
     from sqlalchemy import delete, select
     from .db import Conversation, Message, SessionLocal, Setting, User, init_db
 
@@ -58,8 +56,6 @@ def _db_symbols():
 
 
 def _password_context():
-    # Passlib/bcrypt can load native backends on Windows. Never do that while
-    # importing the ASGI application inside a PyInstaller executable.
     from passlib.context import CryptContext
 
     return CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -89,23 +85,38 @@ def serialize_message(message):
     }
 
 
+def _bundled_file(path: Path, media_type: str | None = None) -> Response:
+    # FileResponse/StaticFiles offload file metadata and reads through AnyIO's
+    # worker-thread pool. That path can stall inside a frozen, windowed
+    # PyInstaller process on Windows. The ORIVOX UI assets are local bundled
+    # files, so read them directly and return the bytes from the ASGI thread.
+    if not path.is_file():
+        raise HTTPException(404, "Asset not found")
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise HTTPException(503, f"Bundled client file could not be read: {exc}")
+    return Response(
+        content=data,
+        media_type=media_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+    )
+
+
 @app.get("/")
-def home():
+async def home():
     index = WEB_DIR / "index.html"
     if not index.exists():
         raise HTTPException(503, "ORIVOX web client is not installed")
-    return FileResponse(index)
+    return _bundled_file(index, "text/html")
 
 
 @app.get("/static/{asset_path:path}")
-def static_asset(asset_path: str):
-    # Serve bundled client assets without constructing StaticFiles at import
-    # time. Resolve and constrain paths to prevent traversal.
+async def static_asset(asset_path: str):
     root = WEB_DIR.resolve()
     target = (WEB_DIR / asset_path).resolve()
     if root not in target.parents or not target.is_file():
         raise HTTPException(404, "Asset not found")
-    return FileResponse(target)
+    return _bundled_file(target)
 
 
 @app.get("/api/status")
