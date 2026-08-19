@@ -20,6 +20,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 90
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,16 +34,16 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-desktop.txt
+          python -m pip install -r requirements-desktop.txt
 
       - name: Compile Python sources
         run: python -m compileall -q orivox desktop.py run.py tests
 
       - name: Run application smoke tests
-        run: pytest -q
+        run: python -m pytest -q
 
       - name: Build ORIVOX desktop bundle
-        run: pyinstaller --noconfirm --clean ORIVOX.spec
+        run: python -m PyInstaller --noconfirm --clean ORIVOX.spec
 
       - name: Verify executable exists
         shell: pwsh
