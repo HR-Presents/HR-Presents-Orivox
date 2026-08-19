@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Response
 from fastapi.responses import FileResponse
@@ -11,7 +12,8 @@ from .config import VERSION, OLLAMA_MODEL
 
 app=FastAPI(title="HR-Presents ORIVOX",version=VERSION)
 pwd=CryptContext(schemes=["bcrypt"],deprecated="auto")
-WEB_DIR=Path(__file__).resolve().parent.parent / "web"
+BUNDLE_ROOT=Path(getattr(sys,"_MEIPASS",Path(__file__).resolve().parent.parent))
+WEB_DIR=BUNDLE_ROOT / "web"
 if WEB_DIR.exists(): app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 class Register(BaseModel): name:str; email:str; password:str
