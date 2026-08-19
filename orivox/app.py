@@ -11,6 +11,7 @@ from .config import OLLAMA_MODEL, VERSION
 app = FastAPI(title="HR-Presents ORIVOX", version=VERSION)
 BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 WEB_DIR = BUNDLE_ROOT / "web"
+ASSET_DIR = BUNDLE_ROOT / "assets"
 
 
 class Register(BaseModel):
@@ -98,6 +99,14 @@ def _bundled_file(path: Path, media_type: str | None = None) -> Response:
     )
 
 
+def _safe_asset(root: Path, asset_path: str) -> Path:
+    resolved_root = root.resolve()
+    target = (root / asset_path).resolve()
+    if resolved_root not in target.parents or not target.is_file():
+        raise HTTPException(404, "Asset not found")
+    return target
+
+
 @app.get("/")
 async def home():
     index = WEB_DIR / "index.html"
@@ -108,11 +117,12 @@ async def home():
 
 @app.get("/static/{asset_path:path}")
 async def static_asset(asset_path: str):
-    root = WEB_DIR.resolve()
-    target = (WEB_DIR / asset_path).resolve()
-    if root not in target.parents or not target.is_file():
-        raise HTTPException(404, "Asset not found")
-    return _bundled_file(target)
+    return _bundled_file(_safe_asset(WEB_DIR, asset_path))
+
+
+@app.get("/brand/{asset_path:path}")
+async def brand_asset(asset_path: str):
+    return _bundled_file(_safe_asset(ASSET_DIR, asset_path))
 
 
 @app.get("/api/health")
@@ -233,10 +243,11 @@ def save_settings(uid: int, x: SettingsUpdate):
             if key not in allowed:
                 continue
             row = db.scalar(select(Setting).where(Setting.user_id == uid, Setting.key == key))
+            stored = str(value).lower() if isinstance(value, bool) else str(value)
             if row:
-                row.value = str(value).lower() if isinstance(value, bool) else str(value)
+                row.value = stored
             else:
-                db.add(Setting(user_id=uid, key=key, value=str(value).lower() if isinstance(value, bool) else str(value)))
+                db.add(Setting(user_id=uid, key=key, value=stored))
         db.commit()
     return get_settings(uid)
 
