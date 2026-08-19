@@ -2,7 +2,7 @@ import mimetypes
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from .config import OLLAMA_MODEL, VERSION
@@ -122,9 +122,6 @@ async def health():
 
 @app.get("/api/status")
 async def status():
-    # Status must be a passive, non-blocking snapshot. Probing Ollama from this
-    # endpoint made packaged health checks depend on an unrelated local service
-    # and could stall request handling on fresh Windows installs.
     runtime = _runtime()
     return {"version": VERSION, "models": dict(runtime.status), "llm": OLLAMA_MODEL}
 
@@ -290,8 +287,8 @@ async def chat(x: Chat):
 
 
 @app.post("/api/transcribe")
-async def transcribe(request: Request):
-    data = await request.body()
+async def transcribe(audio: UploadFile = File(...)):
+    data = await audio.read()
     if not data:
         raise HTTPException(400, "No audio received")
     try:
