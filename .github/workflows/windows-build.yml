@@ -54,13 +54,18 @@ jobs:
       - name: Smoke test packaged runtime
         timeout-minutes: 5
         shell: pwsh
+        env:
+          ORIVOX_NO_BROWSER: '1'
+          ORIVOX_STARTUP_LOG: ${{ runner.temp }}\orivox-startup.log
         run: |
+          Remove-Item $env:ORIVOX_STARTUP_LOG -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--browser' -PassThru
           try {
             $deadline = (Get-Date).AddMinutes(4)
             $ready = $false
             while ((Get-Date) -lt $deadline) {
               if ($proc.HasExited) {
+                if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG }
                 throw "Packaged ORIVOX exited before becoming ready with code $($proc.ExitCode)"
               }
               try {
@@ -74,8 +79,13 @@ jobs:
                 Start-Sleep -Seconds 2
               }
             }
-            if (-not $ready) { throw 'Packaged ORIVOX did not become healthy within 4 minutes' }
+            if (-not $ready) {
+              Write-Host '--- ORIVOX packaged startup trace ---'
+              if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG } else { Write-Host 'No startup trace was produced' }
+              throw 'Packaged ORIVOX did not become healthy within 4 minutes'
+            }
             Write-Host 'Packaged ORIVOX runtime smoke test passed'
+            if (Test-Path $env:ORIVOX_STARTUP_LOG) { Get-Content $env:ORIVOX_STARTUP_LOG }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
