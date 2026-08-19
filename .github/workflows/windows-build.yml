@@ -1,0 +1,74 @@
+name: ORIVOX Windows Desktop
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'orivox/**'
+      - 'web/**'
+      - 'desktop.py'
+      - 'ORIVOX.spec'
+      - 'requirements*.txt'
+      - 'installer/**'
+      - 'scripts/build-windows.ps1'
+      - '.github/workflows/windows-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install desktop runtime and packager
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-desktop.txt
+
+      - name: Compile Python sources
+        run: python -m compileall -q orivox desktop.py run.py tests
+
+      - name: Run application smoke tests
+        run: pytest -q
+
+      - name: Build ORIVOX desktop bundle
+        run: pyinstaller --noconfirm --clean ORIVOX.spec
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'dist\ORIVOX\ORIVOX.exe')) { throw 'ORIVOX.exe was not produced' }
+          Get-ChildItem 'dist\ORIVOX\ORIVOX.exe' | Format-List Name,Length,LastWriteTime
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ORIVOX.iss'
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $portable = 'dist\ORIVOX-Windows-Portable.zip'
+          Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath $portable -CompressionLevel Optimal
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORIVOX-Windows
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/ORIVOX-Windows-Portable.zip
+            dist/installer/ORIVOX-Setup-1.0.0.exe
