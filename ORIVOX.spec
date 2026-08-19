@@ -4,7 +4,17 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 root = Path(SPECPATH)
 hidden = []
-for package in ("uvicorn", "webview", "faster_whisper", "kokoro", "soundfile"):
+for package in (
+    "uvicorn",
+    "webview",
+    "faster_whisper",
+    "kokoro",
+    "soundfile",
+    "sqlalchemy",
+    "passlib",
+    "bcrypt",
+    "multipart",
+):
     try:
         hidden += collect_submodules(package)
     except Exception:
