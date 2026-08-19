@@ -17,6 +17,8 @@ for package in ("certifi",):
     except Exception:
         pass
 
+icon_path = root / "assets" / "orivox.ico"
+
 analysis = Analysis(
     [str(root / "desktop.py")],
     pathex=[str(root)],
@@ -42,5 +44,5 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon=str(root / "assets" / "orivox.ico"),
+    icon=str(icon_path) if icon_path.exists() else None,
 )
