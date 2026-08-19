@@ -55,12 +55,30 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--smoke-test' -PassThru
-          if (-not $proc.WaitForExit(240000)) {
+          $proc = Start-Process -FilePath 'dist\ORIVOX\ORIVOX.exe' -ArgumentList '--browser' -PassThru
+          try {
+            $deadline = (Get-Date).AddMinutes(4)
+            $ready = $false
+            while ((Get-Date) -lt $deadline) {
+              if ($proc.HasExited) {
+                throw "Packaged ORIVOX exited before becoming ready with code $($proc.ExitCode)"
+              }
+              try {
+                $home = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 3
+                $status = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/status' -TimeoutSec 5
+                if ($home.StatusCode -eq 200 -and $home.Content -match 'ORIVOX' -and $status.version -and $status.models) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                Start-Sleep -Seconds 2
+              }
+            }
+            if (-not $ready) { throw 'Packaged ORIVOX did not become healthy within 4 minutes' }
+            Write-Host 'Packaged ORIVOX runtime smoke test passed'
+          } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw 'Packaged ORIVOX smoke test timed out after 4 minutes'
           }
-          if ($proc.ExitCode -ne 0) { throw "Packaged ORIVOX smoke test failed with exit code $($proc.ExitCode)" }
 
       - name: Install Inno Setup
         shell: pwsh
