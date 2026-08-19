@@ -35,9 +35,8 @@ pyz = PYZ(analysis.pure)
 exe = EXE(
     pyz,
     analysis.scripts,
-    analysis.binaries,
-    analysis.datas,
     [],
+    exclude_binaries=True,
     name="ORIVOX",
     debug=False,
     bootloader_ignore_signals=False,
@@ -45,4 +44,13 @@ exe = EXE(
     upx=False,
     console=False,
     icon=str(icon_path) if icon_path.exists() else None,
+)
+coll = COLLECT(
+    exe,
+    analysis.binaries,
+    analysis.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="ORIVOX",
 )
