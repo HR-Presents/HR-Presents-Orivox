@@ -10,7 +10,7 @@ for package in ("uvicorn", "webview", "faster_whisper", "kokoro", "soundfile"):
     except Exception:
         pass
 
-datas = [(str(root / "web"), "web")]
+datas = [(str(root / "web"), "web"), (str(root / "assets"), "assets")]
 for package in ("certifi",):
     try:
         datas += collect_data_files(package)
