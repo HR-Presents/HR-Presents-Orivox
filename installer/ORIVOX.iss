@@ -26,7 +26,7 @@ UninstallDisplayName=HR-Presents ORIVOX
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\dist\ORIVOX\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\ORIVOX.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\HR-Presents ORIVOX"; Filename: "{app}\{#MyAppExeName}"
