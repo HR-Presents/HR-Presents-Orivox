@@ -1,0 +1,46 @@
+name: ORIVOX Windows Installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/complete-orivox]
+    paths:
+      - 'orivox/**'
+      - 'web/**'
+      - 'assets/**'
+      - 'installer/**'
+      - 'scripts/build_windows.ps1'
+      - 'desktop.py'
+      - 'ORIVOX.spec'
+      - 'requirements*.txt'
+      - '.github/workflows/windows.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build desktop application and installer
+        shell: pwsh
+        run: .\scripts\build_windows.ps1
+      - name: Installer smoke check
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release\ORIVOX-v*-Windows-Setup.exe | Select-Object -First 1
+          if (-not $installer) { throw 'Installer artifact missing' }
+          if ($installer.Length -lt 1MB) { throw 'Installer artifact is unexpectedly small' }
+          Write-Host "Installer: $($installer.Name) $([math]::Round($installer.Length/1MB,2)) MB"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ORIVOX-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
