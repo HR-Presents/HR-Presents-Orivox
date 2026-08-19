@@ -2,6 +2,19 @@ name: ORIVOX Windows Desktop
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'orivox/**'
+      - 'web/**'
+      - 'desktop.py'
+      - 'server.py'
+      - 'ORIVOX.spec'
+      - 'requirements*.txt'
+      - 'installer/**'
+      - 'scripts/build-windows.ps1'
+      - '.github/workflows/windows-build.yml'
   pull_request:
     paths:
       - 'orivox/**'
@@ -15,7 +28,7 @@ on:
       - '.github/workflows/windows-build.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows:
@@ -142,3 +155,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: dist/installer/ORIVOX-Setup-1.0.0.exe
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v1.0.0'
+          $notes = @'
+          HR-Presents ORIVOX v1.0.0
+
+          Primary download: ORIVOX-Windows-Portable.zip
+
+          Download the ZIP, extract it completely, then double-click ORIVOX.exe. No installer is required.
+          '@
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag 'dist\ORIVOX-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.0.exe' --clobber
+          } else {
+            gh release create $tag 'dist\ORIVOX-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.0.exe' --title 'HR-Presents ORIVOX v1.0.0' --notes $notes --latest
+          }
