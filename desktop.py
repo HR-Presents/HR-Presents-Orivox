@@ -1,10 +1,27 @@
 import argparse
 import os
 import socket
+import sys
 import threading
 import time
 import webbrowser
 from pathlib import Path
+
+
+def _ensure_standard_streams() -> None:
+    # PyInstaller windowed executables set stdio streams to None. A number of
+    # networking/runtime libraries still probe or write to those streams even
+    # when their visible logging is disabled. Give them safe sinks so request
+    # handling cannot fail or block inside the frozen Windows process.
+    if sys.stdin is None:
+        sys.stdin = open(os.devnull, "r", encoding="utf-8")
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8", buffering=1)
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8", buffering=1)
+
+
+_ensure_standard_streams()
 
 
 def _trace(message: str) -> None:
@@ -56,9 +73,6 @@ def _load_runtime():
 
 
 def _build_server(uvicorn, app, host: str, port: int):
-    # Windowed PyInstaller executables do not provide normal stdout/stderr.
-    # Keep Uvicorn logging disabled and select the concrete asyncio/httptools
-    # stack so no runtime auto-detection occurs after the socket is opened.
     _trace("creating uvicorn config")
     config = uvicorn.Config(
         app,
