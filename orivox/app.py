@@ -86,10 +86,6 @@ def serialize_message(message):
 
 
 def _bundled_file(path: Path, media_type: str | None = None) -> Response:
-    # FileResponse/StaticFiles offload file metadata and reads through AnyIO's
-    # worker-thread pool. That path can stall inside a frozen, windowed
-    # PyInstaller process on Windows. The ORIVOX UI assets are local bundled
-    # files, so read them directly and return the bytes from the ASGI thread.
     if not path.is_file():
         raise HTTPException(404, "Asset not found")
     try:
@@ -119,20 +115,18 @@ async def static_asset(asset_path: str):
     return _bundled_file(target)
 
 
+@app.get("/api/health")
+async def health():
+    return {"ok": True, "version": VERSION}
+
+
 @app.get("/api/status")
 async def status():
+    # Status must be a passive, non-blocking snapshot. Probing Ollama from this
+    # endpoint made packaged health checks depend on an unrelated local service
+    # and could stall request handling on fresh Windows installs.
     runtime = _runtime()
-    try:
-        import httpx
-        from .config import OLLAMA_URL
-
-        async with httpx.AsyncClient(timeout=2) as client:
-            response = await client.get(f"{OLLAMA_URL}/api/tags")
-            response.raise_for_status()
-        runtime.status["ai"] = "ready"
-    except Exception:
-        runtime.status["ai"] = "unavailable"
-    return {"version": VERSION, "models": runtime.status, "llm": OLLAMA_MODEL}
+    return {"version": VERSION, "models": dict(runtime.status), "llm": OLLAMA_MODEL}
 
 
 @app.post("/api/auth/register")
@@ -222,63 +216,42 @@ def save_settings(uid: int, x: SettingsUpdate):
     with SessionLocal() as db:
         for key, value in x.values.items():
             row = db.scalar(select(Setting).where(Setting.user_id == uid, Setting.key == key))
-            stored = str(value).lower() if isinstance(value, bool) else str(value)
             if row:
-                row.value = stored
+                row.value = str(value)
             else:
-                db.add(Setting(user_id=uid, key=key, value=stored))
+                db.add(Setting(user_id=uid, key=key, value=str(value)))
         db.commit()
-    return get_settings(uid)
+    return {"ok": True}
 
 
 @app.get("/api/conversations/{uid}")
-def history(uid: int):
+def conversations(uid: int):
     require_user(uid)
-    SessionLocal, _, Conversation, Message, _, select, _ = _db_symbols()
+    SessionLocal, _, Conversation, _, _, select, _ = _db_symbols()
     with SessionLocal() as db:
-        rows = db.scalars(
-            select(Conversation)
-            .where(Conversation.user_id == uid)
-            .order_by(Conversation.updated_at.desc())
-        ).all()
-        return [
-            {
-                "id": row.id,
-                "title": row.title,
-                "updated_at": row.updated_at,
-                "message_count": len(
-                    db.scalars(select(Message).where(Message.conversation_id == row.id)).all()
-                ),
-            }
-            for row in rows
-        ]
+        rows = db.scalars(select(Conversation).where(Conversation.user_id == uid).order_by(Conversation.updated_at.desc())).all()
+        return [{"id": x.id, "title": x.title, "created_at": x.created_at, "updated_at": x.updated_at} for x in rows]
 
 
-@app.get("/api/conversations/{uid}/{cid}")
+@app.get("/api/conversation/{uid}/{cid}")
 def conversation(uid: int, cid: int):
     require_user(uid)
     SessionLocal, _, Conversation, Message, _, select, _ = _db_symbols()
     with SessionLocal() as db:
-        conv = db.get(Conversation, cid)
-        if not conv or conv.user_id != uid:
+        conv = db.scalar(select(Conversation).where(Conversation.id == cid, Conversation.user_id == uid))
+        if not conv:
             raise HTTPException(404, "Conversation not found")
-        messages = db.scalars(
-            select(Message).where(Message.conversation_id == cid).order_by(Message.id)
-        ).all()
-        return {
-            "id": conv.id,
-            "title": conv.title,
-            "messages": [serialize_message(message) for message in messages],
-        }
+        messages = db.scalars(select(Message).where(Message.conversation_id == cid).order_by(Message.id)).all()
+        return {"id": conv.id, "title": conv.title, "messages": [serialize_message(x) for x in messages]}
 
 
-@app.delete("/api/conversations/{uid}/{cid}")
+@app.delete("/api/conversation/{uid}/{cid}")
 def delete_conversation(uid: int, cid: int):
     require_user(uid)
-    SessionLocal, _, Conversation, Message, _, _, delete = _db_symbols()
+    SessionLocal, _, Conversation, Message, _, select, delete = _db_symbols()
     with SessionLocal() as db:
-        conv = db.get(Conversation, cid)
-        if not conv or conv.user_id != uid:
+        conv = db.scalar(select(Conversation).where(Conversation.id == cid, Conversation.user_id == uid))
+        if not conv:
             raise HTTPException(404, "Conversation not found")
         db.execute(delete(Message).where(Message.conversation_id == cid))
         db.delete(conv)
@@ -286,75 +259,56 @@ def delete_conversation(uid: int, cid: int):
     return {"ok": True}
 
 
-@app.post("/api/transcribe")
-async def transcribe(request: Request):
-    form = await request.form()
-    audio = form.get("audio")
-    if audio is None or not hasattr(audio, "read"):
-        raise HTTPException(400, "Audio recording is required")
-    data = await audio.read()
-    if not data:
-        raise HTTPException(400, "Empty recording")
-    try:
-        text = await _runtime().transcribe(data)
-        if not text:
-            raise HTTPException(422, "No speech was detected")
-        return {"text": text}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(503, f"Speech recognition failed: {exc}")
-
-
 @app.post("/api/chat")
 async def chat(x: Chat):
     require_user(x.user_id)
-    if not x.text.strip():
-        raise HTTPException(400, "Message is empty")
-
     SessionLocal, _, Conversation, Message, _, select, _ = _db_symbols()
+    runtime = _runtime()
     with SessionLocal() as db:
-        conv = db.get(Conversation, x.conversation_id) if x.conversation_id else None
+        conv = None
+        if x.conversation_id:
+            conv = db.scalar(select(Conversation).where(Conversation.id == x.conversation_id, Conversation.user_id == x.user_id))
         if not conv:
-            conv = Conversation(user_id=x.user_id, title=x.text.strip()[:72])
+            conv = Conversation(user_id=x.user_id, title=(x.text.strip()[:60] or "New conversation"))
             db.add(conv)
-            db.flush()
-        if conv.user_id != x.user_id:
-            raise HTTPException(403, "Conversation unavailable")
-        conversation_id = conv.id
-        db.add(Message(conversation_id=conversation_id, role="user", content=x.text.strip()))
+            db.commit()
+            db.refresh(conv)
+        db.add(Message(conversation_id=conv.id, role="user", content=x.text.strip()))
         db.commit()
-        messages = db.scalars(
-            select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id)
-        ).all()
-        payload = [
-            {
-                "role": "system",
-                "content": "You are ORIVOX, a helpful, concise, private local voice assistant by HR-Presents.",
-            }
-        ] + [{"role": message.role, "content": message.content} for message in messages]
+        history = db.scalars(select(Message).where(Message.conversation_id == conv.id).order_by(Message.id)).all()
+        messages = [{"role": m.role, "content": m.content} for m in history]
 
     try:
-        answer = await _runtime().chat(payload)
+        reply = await runtime.chat(messages)
     except Exception as exc:
-        raise HTTPException(503, f"Local AI model unavailable: {exc}")
-
-    from datetime import datetime, timezone
+        raise HTTPException(503, f"AI model unavailable: {exc}")
 
     with SessionLocal() as db:
-        conv = db.get(Conversation, conversation_id)
-        db.add(Message(conversation_id=conversation_id, role="assistant", content=answer))
-        conv.updated_at = datetime.now(timezone.utc)
+        db.add(Message(conversation_id=conv.id, role="assistant", content=reply))
         db.commit()
-    return {"conversation_id": conversation_id, "text": answer}
+    return {"conversation_id": conv.id, "response": reply}
 
 
-@app.post("/api/speech")
-async def speech(x: Speech):
-    if not x.text.strip():
-        raise HTTPException(400, "Speech text is empty")
+@app.post("/api/transcribe")
+async def transcribe(request: Request):
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "No audio received")
     try:
-        audio = await _runtime().speak(x.text, x.voice, x.speed)
-        return Response(audio, media_type="audio/wav")
+        text = await _runtime().transcribe(data)
+    except Exception as exc:
+        raise HTTPException(503, f"Speech recognition failed: {exc}")
+    if not text:
+        raise HTTPException(422, "No speech detected")
+    return {"text": text}
+
+
+@app.post("/api/speak")
+async def speak(x: Speech):
+    if not x.text.strip():
+        raise HTTPException(400, "Text is required")
+    try:
+        audio = await _runtime().speak(x.text.strip(), x.voice, x.speed)
     except Exception as exc:
         raise HTTPException(503, f"Text-to-speech failed: {exc}")
+    return Response(content=audio, media_type="audio/wav")
