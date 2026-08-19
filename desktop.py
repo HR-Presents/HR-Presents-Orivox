@@ -4,10 +4,11 @@ import threading
 import time
 import webbrowser
 
+import httpx
 import uvicorn
 
 from orivox.app import app
-from orivox.config import HOST, PORT, APP_NAME, VERSION
+from orivox.config import HOST, PORT, APP_NAME
 
 
 def _server_ready(host: str, port: int, timeout: float = 15.0) -> bool:
@@ -25,9 +26,23 @@ def _run_server(server: uvicorn.Server) -> None:
     server.run()
 
 
+def _smoke_test(url: str) -> None:
+    with httpx.Client(timeout=10.0) as client:
+        home = client.get(url)
+        home.raise_for_status()
+        if "ORIVOX" not in home.text:
+            raise RuntimeError("Packaged web client did not render ORIVOX branding")
+        status = client.get(f"{url}/api/status")
+        status.raise_for_status()
+        payload = status.json()
+        if "version" not in payload or "models" not in payload:
+            raise RuntimeError("Packaged API status response is incomplete")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="HR-Presents ORIVOX desktop launcher")
     parser.add_argument("--browser", action="store_true", help="Use the system browser instead of an embedded desktop window")
+    parser.add_argument("--smoke-test", action="store_true", help="Start the packaged app, verify its local web/API runtime, then exit")
     args = parser.parse_args()
 
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning", access_log=False)
@@ -37,9 +52,20 @@ def main() -> int:
 
     if not _server_ready(HOST, PORT):
         server.should_exit = True
+        thread.join(timeout=5)
         raise RuntimeError("ORIVOX local server failed to start")
 
     url = f"http://{HOST}:{PORT}"
+
+    if args.smoke_test:
+        try:
+            _smoke_test(url)
+            print("ORIVOX packaged runtime smoke test passed")
+            return 0
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+
     if args.browser:
         webbrowser.open(url)
         try:
@@ -49,11 +75,12 @@ def main() -> int:
             pass
         finally:
             server.should_exit = True
+            thread.join(timeout=5)
         return 0
 
     try:
         import webview
-        window = webview.create_window(
+        webview.create_window(
             f"{APP_NAME} — HR-Presents",
             url,
             width=1280,
