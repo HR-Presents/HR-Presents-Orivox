@@ -197,12 +197,33 @@ jobs:
           - clean ORIVOX brand mark instead of raster logo boxes
           - live first-time Ollama model download progress
           - browser WebM microphone transcription fixes
+          - live web grounding for current information
           - local web experience at http://127.0.0.1:8765
 
           Download the portable ZIP, extract it completely, then double-click ORIVOX.exe.
           '@
+
+          function Invoke-GhWithRetry {
+            param(
+              [Parameter(Mandatory = $true)][scriptblock]$Command,
+              [int]$Attempts = 5
+            )
+            for ($i = 1; $i -le $Attempts; $i++) {
+              try {
+                & $Command
+                if ($LASTEXITCODE -eq 0) { return }
+                throw "gh exited with code $LASTEXITCODE"
+              } catch {
+                if ($i -eq $Attempts) { throw }
+                $delay = [Math]::Min(30, [Math]::Pow(2, $i))
+                Write-Host "GitHub release API attempt $i failed: $($_.Exception.Message). Retrying in $delay seconds..."
+                Start-Sleep -Seconds $delay
+              }
+            }
+          }
+
           if (gh release view $tag 2>$null) {
-            gh release upload $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --clobber
+            Invoke-GhWithRetry { gh release upload $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --clobber }
           } else {
-            gh release create $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --title 'HR-Presents ORIVOX v1.0.1' --notes $notes --latest --target "${{ github.sha }}"
+            Invoke-GhWithRetry { gh release create $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --title 'HR-Presents ORIVOX v1.0.1' --notes $notes --latest --target "${{ github.sha }}" }
           }
