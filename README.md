@@ -13,30 +13,30 @@ Account data, profiles, settings, conversations and messages remain in local SQL
 
 ## Download ORIVOX
 
-### Recommended — Windows Portable ZIP
+### Recommended — ORIVOX v1.0.1 Windows Portable ZIP
 
-The primary customer download is **`ORIVOX-Windows-Portable.zip`** from the latest GitHub release:
+The primary customer download is **`ORIVOX-v1.0.1-Windows-Portable.zip`** from the latest GitHub release:
 
 https://github.com/HR-Presents/HR-Presents-Orivox/releases/latest
 
-1. Download `ORIVOX-Windows-Portable.zip`.
+1. Download `ORIVOX-v1.0.1-Windows-Portable.zip`.
 2. Extract the ZIP completely into a new folder.
 3. Open the extracted ORIVOX folder.
 4. Run `ORIVOX.exe`.
-5. ORIVOX starts its local server and opens the browser interface on `127.0.0.1`.
+5. ORIVOX starts its local server and opens the browser interface at **http://127.0.0.1:8765**.
 
 No Python or Node.js installation is required for the packaged portable build. Keep the extracted files together because the launcher uses the packaged local server and runtime from the same folder.
 
 An installer may also be published for users who prefer installation, but the **portable ZIP is the recommended ORIVOX distribution**.
 
-## Latest experience
+## ORIVOX v1.0.1
 
-The current ORIVOX release includes:
+This release is the redesigned local-web build and includes:
 
 - Premium responsive local web interface
 - Top navigation for Overview, Voice Assistant, Conversations, Profile, Settings and Help
-- HR-Presents / ORIVOX blue, slate and light visual system
-- Native UI brand mark and ORIVOX wordmark treatment
+- Sentrix-inspired blue, slate and light visual system
+- Native UI ORIVOX brand mark and wordmark treatment
 - Dynamic local registration and login with hashed passwords
 - Persistent local profiles, conversations and settings
 - Faster-Whisper speech-to-text, including browser WebM/Opus microphone recordings
@@ -109,7 +109,7 @@ Open **http://127.0.0.1:8765** after the server starts.
 .\scripts\build-windows.ps1
 ```
 
-The **ORIVOX Windows Desktop** GitHub Actions workflow compiles the runtime, runs application tests, smoke-tests the packaged HTTP application, creates the portable ZIP, optionally creates the installer, uploads artifacts and publishes validated `main` builds to GitHub Releases.
+The **ORIVOX Windows Desktop** GitHub Actions workflow compiles the runtime, runs application tests, smoke-tests the packaged HTTP application, creates the versioned portable ZIP, optionally creates the installer, uploads artifacts and publishes validated `main` builds to GitHub Releases.
 
 ## Local data and configuration
 
