@@ -9,6 +9,7 @@ for package in (
     "webview",
     "faster_whisper",
     "kokoro",
+    "language_tags",
     "soundfile",
     "sqlalchemy",
     "passlib",
@@ -20,11 +21,11 @@ for package in (
     except Exception:
         pass
 
-# Bundle the web client, branding, and package-owned runtime assets.  Faster-
-# Whisper loads Silero VAD ONNX files by path at runtime, so importing the
-# Python modules alone is not enough for a frozen Windows distribution.
+# Bundle package-owned runtime data that is loaded by path at runtime.  This
+# includes Faster-Whisper's Silero ONNX files and language-tags' JSON registry,
+# which Kokoro needs during text-to-speech initialization in frozen builds.
 datas = [(str(root / "web"), "web"), (str(root / "assets"), "assets")]
-for package in ("certifi", "faster_whisper"):
+for package in ("certifi", "faster_whisper", "language_tags", "kokoro"):
     try:
         datas += collect_data_files(package)
     except Exception:
