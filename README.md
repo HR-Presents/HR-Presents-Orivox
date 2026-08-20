@@ -5,115 +5,93 @@
 <h1 align="center">ORIVOX</h1>
 <p align="center"><strong>Private, local-first AI voice assistant by HR-Presents.</strong></p>
 
-ORIVOX is a Windows local web application. It runs its backend on your computer and opens the product interface in your browser at **http://127.0.0.1:8765** by default.
+ORIVOX is a Windows local web application. The backend runs on the user's computer and the interface opens in the browser at **http://127.0.0.1:8765**.
 
-**Microphone → Faster-Whisper → Local AI (Ollama) → Kokoro → Speaker**
-
-Account data, profiles, settings, conversations and messages remain in local SQLite storage under the user's application data directory.
+**Microphone → Faster-Whisper → Local AI (Ollama / Qwen) → Kokoro → Speaker**
 
 ## Download ORIVOX
 
-### Recommended — ORIVOX v1.0.1 Windows Portable ZIP
+### Recommended — ORIVOX v1.0.2 Local Web ZIP
 
-The primary customer download is **`ORIVOX-v1.0.1-Windows-Portable.zip`** from the latest GitHub release:
+The primary customer download is:
+
+**`ORIVOX-v1.0.2-Local-Web.zip`**
+
+Get it from the latest GitHub Release:
 
 https://github.com/HR-Presents/HR-Presents-Orivox/releases/latest
 
-1. Download `ORIVOX-v1.0.1-Windows-Portable.zip`.
-2. Extract the ZIP completely into a new folder.
-3. Open the extracted ORIVOX folder.
-4. Run `ORIVOX.exe`.
-5. ORIVOX starts its local server and opens the browser interface at **http://127.0.0.1:8765**.
+This is intentionally a **local website package**, not a traditional desktop application.
 
-No Python or Node.js installation is required for the packaged portable build. Keep the extracted files together because the launcher uses the packaged local server and runtime from the same folder.
+### First launch
 
-An installer may also be published for users who prefer installation, but the **portable ZIP is the recommended ORIVOX distribution**.
+1. Download `ORIVOX-v1.0.2-Local-Web.zip`.
+2. Extract the ZIP completely into a normal folder.
+3. Double-click **`Start ORIVOX.bat`**.
+4. A terminal opens and stays visible so setup never looks frozen.
+5. ORIVOX checks/install Python 3.11 if necessary.
+6. ORIVOX creates a private `.venv` inside the extracted folder.
+7. Python requirements install with visible pip progress.
+8. ORIVOX checks/install Ollama if necessary.
+9. ORIVOX checks the default local model **`qwen2.5:3b`**.
+10. If the model is missing, the terminal runs `ollama pull qwen2.5:3b` and shows Ollama's live download percentage, transferred size, total size and speed.
+11. When setup finishes, ORIVOX starts locally and opens **http://127.0.0.1:8765** automatically.
 
-## ORIVOX v1.0.1
+Keep the terminal open while using ORIVOX. Press **Ctrl+C** in that terminal to stop the local server.
 
-This release is the redesigned local-web build and includes:
+Later launches reuse the existing `.venv`, installed Python packages, Ollama runtime and Qwen model, so they skip the expensive setup steps and start much faster.
 
-- Premium responsive local web interface
-- Top navigation for Overview, Voice Assistant, Conversations, Profile, Settings and Help
-- Sentrix-inspired blue, slate and light visual system
-- Native UI ORIVOX brand mark and wordmark treatment
-- Dynamic local registration and login with hashed passwords
-- Persistent local profiles, conversations and settings
-- Faster-Whisper speech-to-text, including browser WebM/Opus microphone recordings
-- Ollama-backed local conversational AI using `qwen2.5:3b` by default
-- Automatic first-time Ollama model provisioning when the configured model is missing
-- Live model setup state, model name, download phase, bytes downloaded and percentage in the web interface
-- Kokoro local text-to-speech
-- Microphone recording, live audio visualization and voice playback controls
-- Light, dark and system appearance modes
-- SQLite-backed local application data
-- Packaged Windows runtime with automated HTTP smoke testing
+## What v1.0.2 changes
 
-## First-time local AI setup
+The distribution now behaves the same way users expect from a local web product such as Sentrix:
 
-ORIVOX uses Ollama for local conversational generation. The default model is **`qwen2.5:3b`**.
+- no hidden multi-minute AI model setup
+- no need to wonder whether Qwen is downloading
+- visible first-run terminal setup
+- visible Python dependency installation progress
+- automatic Ollama detection / installation path
+- visible `qwen2.5:3b` pull progress
+- browser interface served locally from `127.0.0.1`
+- reusable local `.venv` so dependencies are not reinstalled every launch
+- local SQLite users, profiles, settings and conversations
+- Faster-Whisper speech-to-text
+- Kokoro text-to-speech
+- live web grounding for questions that require up-to-date information
 
-If the configured model is not already installed, ORIVOX can provision it through Ollama and exposes the download state to the website so first-time setup does not appear to be a frozen AI response. The interface can display the configured model, current setup phase, downloaded bytes, total bytes and percentage while the model is being pulled.
+## Current-data behavior
 
-Ollama runs locally at **http://127.0.0.1:11434** by default. If Ollama itself is not installed/running, install/start Ollama first. Advanced users can manually provision the model with:
+ORIVOX remains local-first, but questions asking for **latest/current/today/yesterday/live** information can use internet retrieval before the local model writes the response. Examples include recent football results, current news, weather, recent events and other time-sensitive queries.
+
+The LLM still runs through local Ollama. Internet access is required only when downloading dependencies/models or when the user asks for information that must be retrieved from the live web.
+
+## Local AI setup
+
+The default model is:
+
+```text
+qwen2.5:3b
+```
+
+The first-run launcher checks whether it is already available through Ollama. If it is missing, the launcher runs:
 
 ```powershell
 ollama pull qwen2.5:3b
 ```
 
-The model is intentionally not embedded inside the ORIVOX ZIP because local AI models are substantially larger than the application package.
+That command remains visible in the ORIVOX setup terminal so the user can see the actual model download progress rather than sitting on an indefinite "Thinking locally" screen.
 
-## Architecture
-
-- `orivox/app.py` — FastAPI local application and API
-- `orivox/db.py` — SQLite users, conversations, messages and settings
-- `orivox/services.py` — lazy-loaded Whisper, Ollama and Kokoro services
-- `orivox/config.py` — portable environment-aware configuration
-- `web/` — responsive ORIVOX browser interface
-- `desktop.py` — packaged Windows launcher
-- `server.py` — packaged local HTTP server worker
-- `ORIVOX.spec` — PyInstaller bundle definition
-- `installer/ORIVOX.iss` — optional installer definition
-- `run.py` — developer/local browser launcher
-
-The speech recognition, conversational AI and speech synthesis layers are separated so each can be upgraded independently.
-
-## Windows requirements
+## Requirements
 
 - Windows 10 or Windows 11 x64
-- Working microphone and audio output device for voice features
-- Ollama installed/running for local conversational AI
-- Internet access during first-time model download if the configured Ollama model is not already present
-- Sufficient free disk space for ORIVOX and locally downloaded AI models
+- Internet connection for first-time setup/model downloads and live-current-data questions
+- Microphone and speakers/headphones for voice features
+- Enough disk space for Python dependencies and the local Qwen model
 
-The packaged ORIVOX ZIP includes its Python/runtime dependencies. Users do not need to install Python just to launch it.
+Python and Ollama are checked by the launcher. If Python 3.11 or Ollama are missing and Windows Package Manager (`winget`) is available, ORIVOX attempts to install them automatically.
 
-## Developer setup
+## Local data
 
-Python 3.11 is recommended.
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-ollama pull qwen2.5:3b
-python run.py
-```
-
-Open **http://127.0.0.1:8765** after the server starts.
-
-## Build the Windows portable ZIP
-
-```powershell
-.\scripts\build-windows.ps1
-```
-
-The **ORIVOX Windows Desktop** GitHub Actions workflow compiles the runtime, runs application tests, smoke-tests the packaged HTTP application, creates the versioned portable ZIP, optionally creates the installer, uploads artifacts and publishes validated `main` builds to GitHub Releases.
-
-## Local data and configuration
-
-ORIVOX stores application-managed data under `%LOCALAPPDATA%\ORIVOX` by default.
+Application data is stored under `%LOCALAPPDATA%\ORIVOX` by default.
 
 Supported environment overrides include:
 
@@ -125,20 +103,31 @@ Supported environment overrides include:
 - `ORIVOX_OLLAMA_URL`
 - `ORIVOX_PORT`
 
-No developer-specific username, drive or absolute development path is required.
+## Developer setup
 
-## Privacy
+Python 3.11 is recommended:
 
-ORIVOX is designed around a local-first workflow. Speech recognition, conversational generation and voice synthesis are intended to execute on the user's computer. Raw browser microphone recordings are processed for transcription and are not permanently stored by the current API.
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+ollama pull qwen2.5:3b
+python run.py
+```
 
-## Validation
+Then open **http://127.0.0.1:8765**.
 
-Automated tests cover startup, authentication, local profile/settings persistence, browser microphone transcription paths, model provisioning/progress state and other application behavior. Windows CI additionally validates the packaged local HTTP runtime before publishing customer packages.
+## Distribution files
 
-Physical microphone, speaker, Ollama download speed and model performance still depend on the customer's Windows hardware and environment.
+- `Start ORIVOX.bat` — customer one-click launcher
+- `scripts/bootstrap-local.ps1` — visible first-run setup and local-server bootstrap
+- `run.py` — local FastAPI server entry point
+- `orivox/` — backend and AI services
+- `web/` — browser interface
+- `requirements.txt` — local Python dependencies
+- `.github/workflows/local-web.yml` — validates and publishes the customer Local Web ZIP
 
-## Branding
-
-The official product is **ORIVOX**, created by **HR-Presents**. Repository artwork is stored under `assets/`, while the current web interface renders its compact brand mark and wordmark natively for clean scaling inside the product UI.
+The older compiled Windows desktop bundle can still be maintained separately, but **`ORIVOX-v1.0.2-Local-Web.zip` is now the recommended customer package**.
 
 Copyright © 2026 **HR-Presents**. All rights reserved.
