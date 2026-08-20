@@ -138,27 +138,30 @@ jobs:
         shell: pwsh
         run: |
           @'
-          HR-Presents ORIVOX — Windows Portable
+          HR-Presents ORIVOX v1.0.1 — Windows Portable
 
           1. Extract this ZIP completely.
           2. Open the extracted ORIVOX folder.
           3. Double-click ORIVOX.exe.
-          4. ORIVOX runs locally on your computer. No installer is required.
+          4. ORIVOX runs locally at http://127.0.0.1:8765. No installer is required.
+
+          This build includes the redesigned top navigation, Sentrix-inspired visual system,
+          browser WebM microphone support, and live Ollama model download progress.
 
           Keep all files in this folder together; ORIVOX-server.exe and the bundled runtime are required by ORIVOX.exe.
           '@ | Set-Content -Path 'dist\ORIVOX\README-FIRST.txt' -Encoding UTF8
 
       - name: Create portable ZIP
         shell: pwsh
-        run: Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath 'dist\ORIVOX-Windows-Portable.zip' -CompressionLevel Optimal
+        run: Compress-Archive -Path 'dist\ORIVOX\*' -DestinationPath 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' -CompressionLevel Optimal
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ORIVOX-Windows-Portable
+          name: ORIVOX-v1.0.1-Windows-Portable
           if-no-files-found: error
           retention-days: 14
-          path: dist/ORIVOX-Windows-Portable.zip
+          path: dist/ORIVOX-v1.0.1-Windows-Portable.zip
 
       - name: Install Inno Setup
         shell: pwsh
@@ -171,10 +174,10 @@ jobs:
       - name: Upload optional installer
         uses: actions/upload-artifact@v4
         with:
-          name: ORIVOX-Windows-Installer
+          name: ORIVOX-v1.0.1-Windows-Installer
           if-no-files-found: error
           retention-days: 14
-          path: dist/installer/ORIVOX-Setup-1.0.0.exe
+          path: dist/installer/ORIVOX-Setup-1.0.1.exe
 
       - name: Publish GitHub release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -182,18 +185,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'v1.0.0'
+          $tag = 'v1.0.1'
           $notes = @'
-          HR-Presents ORIVOX v1.0.0
+          HR-Presents ORIVOX v1.0.1
 
-          Primary download: ORIVOX-Windows-Portable.zip
+          Primary download: ORIVOX-v1.0.1-Windows-Portable.zip
 
-          Download the ZIP, extract it completely, then double-click ORIVOX.exe. No installer is required.
+          What's new:
+          - redesigned premium top navigation
+          - Sentrix-inspired blue/slate/white visual system
+          - clean ORIVOX brand mark instead of raster logo boxes
+          - live first-time Ollama model download progress
+          - browser WebM microphone transcription fixes
+          - local web experience at http://127.0.0.1:8765
+
+          Download the portable ZIP, extract it completely, then double-click ORIVOX.exe.
           '@
           if (gh release view $tag 2>$null) {
-            gh release upload $tag 'dist\ORIVOX-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.0.exe' --clobber
+            gh release upload $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --clobber
           } else {
-            gh release create $tag 'dist\ORIVOX-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.0.exe' --title 'HR-Presents ORIVOX v1.0.0' --notes $notes --latest
+            gh release create $tag 'dist\ORIVOX-v1.0.1-Windows-Portable.zip' 'dist\installer\ORIVOX-Setup-1.0.1.exe' --title 'HR-Presents ORIVOX v1.0.1' --notes $notes --latest --target "${{ github.sha }}"
           }
-
-# main release trigger
