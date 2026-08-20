@@ -10,6 +10,7 @@ for package in (
     "faster_whisper",
     "kokoro",
     "language_tags",
+    "ddgs",
     "soundfile",
     "sqlalchemy",
     "passlib",
@@ -21,11 +22,8 @@ for package in (
     except Exception:
         pass
 
-# Bundle package-owned runtime data that is loaded by path at runtime.  This
-# includes Faster-Whisper's Silero ONNX files and language-tags' JSON registry,
-# which Kokoro needs during text-to-speech initialization in frozen builds.
 datas = [(str(root / "web"), "web"), (str(root / "assets"), "assets")]
-for package in ("certifi", "faster_whisper", "language_tags", "kokoro"):
+for package in ("certifi", "faster_whisper", "language_tags", "kokoro", "ddgs"):
     try:
         datas += collect_data_files(package)
     except Exception:
@@ -33,69 +31,12 @@ for package in ("certifi", "faster_whisper", "language_tags", "kokoro"):
 
 icon_path = root / "assets" / "orivox.ico"
 
-launcher_analysis = Analysis(
-    [str(root / "desktop.py")],
-    pathex=[str(root)],
-    binaries=[],
-    datas=datas,
-    hiddenimports=hidden,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
-)
+launcher_analysis = Analysis([str(root / "desktop.py")], pathex=[str(root)], binaries=[], datas=datas, hiddenimports=hidden, hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False)
 launcher_pyz = PYZ(launcher_analysis.pure)
-launcher_exe = EXE(
-    launcher_pyz,
-    launcher_analysis.scripts,
-    [],
-    exclude_binaries=True,
-    name="ORIVOX",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=False,
-    icon=str(icon_path) if icon_path.exists() else None,
-)
+launcher_exe = EXE(launcher_pyz, launcher_analysis.scripts, [], exclude_binaries=True, name="ORIVOX", debug=False, bootloader_ignore_signals=False, strip=False, upx=False, console=False, icon=str(icon_path) if icon_path.exists() else None)
 
-server_analysis = Analysis(
-    [str(root / "server.py")],
-    pathex=[str(root)],
-    binaries=[],
-    datas=datas,
-    hiddenimports=hidden,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
-)
+server_analysis = Analysis([str(root / "server.py")], pathex=[str(root)], binaries=[], datas=datas, hiddenimports=hidden, hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False)
 server_pyz = PYZ(server_analysis.pure)
-server_exe = EXE(
-    server_pyz,
-    server_analysis.scripts,
-    [],
-    exclude_binaries=True,
-    name="ORIVOX-server",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=True,
-    icon=str(icon_path) if icon_path.exists() else None,
-)
+server_exe = EXE(server_pyz, server_analysis.scripts, [], exclude_binaries=True, name="ORIVOX-server", debug=False, bootloader_ignore_signals=False, strip=False, upx=False, console=True, icon=str(icon_path) if icon_path.exists() else None)
 
-coll = COLLECT(
-    launcher_exe,
-    server_exe,
-    launcher_analysis.binaries,
-    launcher_analysis.datas,
-    server_analysis.binaries,
-    server_analysis.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="ORIVOX",
-)
+coll = COLLECT(launcher_exe, server_exe, launcher_analysis.binaries, launcher_analysis.datas, server_analysis.binaries, server_analysis.datas, strip=False, upx=False, upx_exclude=[], name="ORIVOX")
