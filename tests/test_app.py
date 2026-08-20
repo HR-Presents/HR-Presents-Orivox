@@ -16,14 +16,25 @@ def test_web_client_loads():
     assert 'ORIVOX' in response.text
     assert 'Your voice.' in response.text
     assert 'Voice Assistant' in response.text
-    assert '/brand/orivox-logo.jpg' in response.text
+    assert 'brand-symbol' in response.text
+    assert 'modelDownloadBanner' in response.text
+    assert '<aside class="sidebar">' not in response.text
 
 
-def test_brand_asset_loads_locally():
+def test_brand_asset_still_loads_for_release_metadata():
     response = client.get('/brand/orivox-logo.jpg')
     assert response.status_code == 200
     assert response.headers['content-type'].startswith('image/jpeg')
     assert len(response.content) > 1000
+
+
+def test_status_exposes_dynamic_model_progress_fields():
+    response = client.get('/api/status')
+    assert response.status_code == 200
+    models = response.json()['models']
+    assert 'ai_model' in models
+    assert 'ai_download_percent' in models
+    assert 'ai_download_status' in models
 
 
 def test_register_login_profile_settings_flow():
@@ -34,15 +45,12 @@ def test_register_login_profile_settings_flow():
     assert login.status_code == 200
     user = login.json()
     uid = user['id']
-
     session = client.get(f'/api/auth/session/{uid}')
     assert session.status_code == 200
     assert session.json()['email'] == email
-
     profile = client.put(f'/api/profile/{uid}', json={'name': 'CI Updated'})
     assert profile.status_code == 200
     assert profile.json()['name'] == 'CI Updated'
-
     saved = client.put(f'/api/settings/{uid}', json={'values': {'theme': 'dark', 'voice': 'af_heart', 'speed': '1.1'}})
     assert saved.status_code == 200
     assert saved.json()['theme'] == 'dark'
