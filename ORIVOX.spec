@@ -20,8 +20,11 @@ for package in (
     except Exception:
         pass
 
+# Bundle the web client, branding, and package-owned runtime assets.  Faster-
+# Whisper loads Silero VAD ONNX files by path at runtime, so importing the
+# Python modules alone is not enough for a frozen Windows distribution.
 datas = [(str(root / "web"), "web"), (str(root / "assets"), "assets")]
-for package in ("certifi",):
+for package in ("certifi", "faster_whisper"):
     try:
         datas += collect_data_files(package)
     except Exception:
