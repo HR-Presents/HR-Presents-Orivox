@@ -1,5 +1,6 @@
 import io
 import os
+import json
 import tempfile
 import asyncio
 import httpx
@@ -11,14 +12,31 @@ class Runtime:
     def __init__(self):
         self.whisper = None
         self.kokoro = None
-        self.status = {"whisper": "idle", "kokoro": "idle", "ai": "checking"}
+        self.status = {
+            "whisper": "idle",
+            "kokoro": "idle",
+            "ai": "checking",
+            "ai_model": OLLAMA_MODEL,
+            "ai_download_status": "idle",
+            "ai_download_percent": 0,
+            "ai_download_completed": 0,
+            "ai_download_total": 0,
+        }
+
+    def _reset_download(self, model=None):
+        self.status.update({
+            "ai_model": model or OLLAMA_MODEL,
+            "ai_download_status": "idle",
+            "ai_download_percent": 0,
+            "ai_download_completed": 0,
+            "ai_download_total": 0,
+        })
 
     def load_whisper(self):
         if self.whisper:
             return self.whisper
         self.status["whisper"] = "loading"
         from faster_whisper import WhisperModel
-
         self.whisper = WhisperModel(
             WHISPER_MODEL,
             device="cpu",
@@ -41,24 +59,18 @@ class Runtime:
         return ".audio"
 
     async def transcribe(self, data: bytes):
-        """Transcribe browser-recorded audio with Whisper/PyAV.
-
-        Browser MediaRecorder output is normally WebM/Opus on Chrome/Edge.
-        SoundFile/libsndfile cannot reliably decode that container on Windows,
-        while faster-whisper's PyAV decoder can.  Write the uploaded bytes to a
-        temporary file so Whisper can decode the original browser container.
-        """
         if not data:
             raise ValueError("No audio data received")
-
         model = await asyncio.to_thread(self.load_whisper)
         temp_path = None
         try:
-            suffix = self._audio_suffix(data)
-            with tempfile.NamedTemporaryFile(prefix="orivox-recording-", suffix=suffix, delete=False) as f:
+            with tempfile.NamedTemporaryFile(
+                prefix="orivox-recording-",
+                suffix=self._audio_suffix(data),
+                delete=False,
+            ) as f:
                 f.write(data)
                 temp_path = f.name
-
             segs, _ = await asyncio.to_thread(model.transcribe, temp_path, vad_filter=True)
             return " ".join(s.text.strip() for s in segs).strip()
         finally:
@@ -78,33 +90,65 @@ class Runtime:
             pass
         return response.text.strip() or f"HTTP {response.status_code}"
 
+    def _apply_pull_event(self, payload: dict, model: str) -> None:
+        completed = int(payload.get("completed") or 0)
+        total = int(payload.get("total") or 0)
+        percent = round((completed / total) * 100, 1) if total else self.status.get("ai_download_percent", 0)
+        phase = str(payload.get("status") or "Downloading model")
+        self.status.update({
+            "ai": "downloading",
+            "ai_model": model,
+            "ai_download_status": phase,
+            "ai_download_percent": min(100, percent),
+            "ai_download_completed": completed,
+            "ai_download_total": total,
+        })
+
     async def _pull_ollama_model(self, client: httpx.AsyncClient, model: str) -> None:
-        self.status["ai"] = "downloading"
+        self.status.update({"ai": "downloading", "ai_model": model, "ai_download_status": "Starting download"})
         try:
-            response = await client.post(
+            async with client.stream(
+                "POST",
                 f"{OLLAMA_URL}/api/pull",
-                json={"name": model, "stream": False},
+                json={"name": model, "stream": True},
                 timeout=1800,
-            )
+            ) as response:
+                if response.is_error:
+                    body = await response.aread()
+                    self.status["ai"] = "unavailable"
+                    raise RuntimeError(
+                        f"Could not download local AI model '{model}': "
+                        f"{body.decode(errors='ignore').strip() or f'HTTP {response.status_code}'}"
+                    )
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("error"):
+                        self.status["ai"] = "unavailable"
+                        raise RuntimeError(f"Could not download local AI model '{model}': {payload['error']}")
+                    self._apply_pull_event(payload, model)
         except httpx.ConnectError as exc:
             self.status["ai"] = "unavailable"
-            raise RuntimeError(
-                "The local AI engine is not running. Start Ollama, then reopen ORIVOX."
-            ) from exc
+            raise RuntimeError("The local AI engine is not running. Start Ollama, then reopen ORIVOX.") from exc
         except httpx.TimeoutException as exc:
             self.status["ai"] = "unavailable"
             raise RuntimeError(
                 f"Timed out while downloading the local AI model '{model}'. Check your internet connection and try again."
             ) from exc
 
-        if response.is_error:
-            self.status["ai"] = "unavailable"
-            raise RuntimeError(
-                f"Could not download local AI model '{model}': {self._ollama_error(response)}"
-            )
-        self.status["ai"] = "ready"
+        self.status.update({
+            "ai": "ready",
+            "ai_model": model,
+            "ai_download_status": "Model ready",
+            "ai_download_percent": 100,
+        })
 
     async def chat(self, messages, model=OLLAMA_MODEL):
+        self.status["ai_model"] = model
         async with httpx.AsyncClient(timeout=120) as client:
             try:
                 response = await client.post(
@@ -113,16 +157,11 @@ class Runtime:
                 )
             except httpx.ConnectError as exc:
                 self.status["ai"] = "unavailable"
-                raise RuntimeError(
-                    "The local AI engine is not running. Start Ollama, then reopen ORIVOX."
-                ) from exc
+                raise RuntimeError("The local AI engine is not running. Start Ollama, then reopen ORIVOX.") from exc
             except httpx.TimeoutException as exc:
                 self.status["ai"] = "unavailable"
                 raise RuntimeError("The local AI model took too long to respond.") from exc
 
-            # Ollama returns 404 when the requested model is not installed.
-            # Provision the configured local model automatically on first use,
-            # then retry the original chat request once.
             if response.status_code == 404:
                 error_text = self._ollama_error(response)
                 if "model" in error_text.lower() and (
@@ -137,9 +176,7 @@ class Runtime:
 
             if response.is_error:
                 self.status["ai"] = "unavailable"
-                raise RuntimeError(
-                    f"Local AI request failed: {self._ollama_error(response)}"
-                )
+                raise RuntimeError(f"Local AI request failed: {self._ollama_error(response)}")
 
             payload = response.json()
             content = payload.get("message", {}).get("content", "").strip()
@@ -147,6 +184,7 @@ class Runtime:
                 self.status["ai"] = "unavailable"
                 raise RuntimeError("The local AI model returned an empty response.")
             self.status["ai"] = "ready"
+            self.status["ai_download_status"] = "Model ready"
             return content
 
     def load_kokoro(self):
@@ -154,17 +192,13 @@ class Runtime:
             return self.kokoro
         self.status["kokoro"] = "loading"
         from kokoro import KPipeline
-
         self.kokoro = KPipeline(lang_code="a")
         self.status["kokoro"] = "ready"
         return self.kokoro
 
     async def speak(self, text, voice=KOKORO_VOICE, speed=1.0):
-        # Kokoro/Torch and NumPy are intentionally lazy so normal ORIVOX
-        # startup remains fast on CPU-only Windows systems.
         import numpy as np
         import soundfile as sf
-
         pipe = await asyncio.to_thread(self.load_kokoro)
         chunks = []
         for _, _, audio in pipe(text, voice=voice, speed=speed):
