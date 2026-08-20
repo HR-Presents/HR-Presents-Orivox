@@ -21,6 +21,7 @@ Write-Host 'Later launches reuse everything already installed.'
 # ---------- Python ----------
 Step 'Checking Python 3.11+'
 $python = $null
+$pythonMode = 'exe'
 $pythonCandidates = @(
   "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
   "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
@@ -31,13 +32,19 @@ foreach ($candidate in $pythonCandidates) {
 if (-not $python) {
   $cmd = Get-Command py -ErrorAction SilentlyContinue
   if ($cmd) {
-    try { & py -3.11 -c "import sys; assert sys.version_info >= (3,11)" 2>$null; if ($LASTEXITCODE -eq 0) { $python = 'py'; $script:pyArgs = @('-3.11') } } catch {}
+    try {
+      & py -3.11 -c "import sys; assert sys.version_info >= (3,11)" 2>$null
+      if ($LASTEXITCODE -eq 0) { $python = 'py'; $pythonMode = 'py' }
+    } catch {}
   }
 }
 if (-not $python) {
   $cmd = Get-Command python -ErrorAction SilentlyContinue
   if ($cmd) {
-    try { & python -c "import sys; assert sys.version_info >= (3,11)" 2>$null; if ($LASTEXITCODE -eq 0) { $python = 'python'; $script:pyArgs = @() } } catch {}
+    try {
+      & python -c "import sys; assert sys.version_info >= (3,11)" 2>$null
+      if ($LASTEXITCODE -eq 0) { $python = $cmd.Source; $pythonMode = 'exe' }
+    } catch {}
   }
 }
 
@@ -48,13 +55,13 @@ if (-not $python) {
   & winget install --id Python.Python.3.11 -e --scope user --accept-source-agreements --accept-package-agreements
   if ($LASTEXITCODE -ne 0) { throw 'Python installation failed.' }
   $python = "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+  $pythonMode = 'exe'
   if (-not (Test-Path $python)) { throw 'Python installed but executable was not found. Reopen Start ORIVOX.bat.' }
 }
 Good 'Python is ready.'
 
-# Helper for py launcher versus concrete python.exe
 function Run-Python([string[]]$Arguments) {
-  if ($python -eq 'py') { & py @script:pyArgs @Arguments }
+  if ($pythonMode -eq 'py') { & py -3.11 @Arguments }
   else { & $python @Arguments }
   if ($LASTEXITCODE -ne 0) { throw "Python command failed: $($Arguments -join ' ')" }
 }
@@ -84,25 +91,28 @@ if ($installedHash -ne $reqHash) {
 
 # ---------- Ollama ----------
 Step 'Checking Ollama local AI runtime'
-$ollama = Get-Command ollama -ErrorAction SilentlyContinue
-if (-not $ollama) {
+$ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
+$ollamaExe = if ($ollamaCmd) { $ollamaCmd.Source } else { $null }
+if (-not $ollamaExe) {
   $known = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
-  if (Test-Path $known) { $ollama = Get-Item $known }
+  if (Test-Path $known) { $ollamaExe = $known }
 }
-if (-not $ollama) {
+if (-not $ollamaExe) {
   Info 'Ollama is not installed. ORIVOX will install it now.'
   $winget = Get-Command winget -ErrorAction SilentlyContinue
   if (-not $winget) { throw 'Ollama is required and winget is unavailable. Install Ollama from ollama.com, then run Start ORIVOX.bat again.' }
   & winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements
   if ($LASTEXITCODE -ne 0) { throw 'Ollama installation failed.' }
   $known = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
-  if (Test-Path $known) { $ollama = Get-Item $known } else { $ollama = Get-Command ollama -ErrorAction SilentlyContinue }
-  if (-not $ollama) { throw 'Ollama installed but was not found. Reopen Start ORIVOX.bat.' }
+  if (Test-Path $known) { $ollamaExe = $known }
+  if (-not $ollamaExe) {
+    $ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
+    if ($ollamaCmd) { $ollamaExe = $ollamaCmd.Source }
+  }
+  if (-not $ollamaExe) { throw 'Ollama installed but was not found. Reopen Start ORIVOX.bat.' }
 }
-$ollamaExe = if ($ollama.Path) { $ollama.Path } else { $ollama.FullName }
 Good 'Ollama is installed.'
 
-# Ensure Ollama service responds.
 $ollamaReady = $false
 try { Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2 | Out-Null; $ollamaReady = $true } catch {}
 if (-not $ollamaReady) {
@@ -122,7 +132,9 @@ Step "Checking local AI model: $model"
 $modelPresent = $false
 try {
   $tags = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5
-  foreach ($m in $tags.models) { if ($m.name -eq $model -or $m.model -eq $model) { $modelPresent = $true; break } }
+  foreach ($m in $tags.models) {
+    if ($m.name -eq $model -or $m.model -eq $model) { $modelPresent = $true; break }
+  }
 } catch {}
 
 if (-not $modelPresent) {
@@ -146,7 +158,6 @@ $url = "http://127.0.0.1:$port"
 Write-Host "Local address: $url" -ForegroundColor Green
 Write-Host 'Keep this terminal open while using ORIVOX. Press Ctrl+C here to stop the server.'
 
-# Open browser after server becomes reachable.
 $server = Start-Process -FilePath $venvPython -ArgumentList @('run.py') -PassThru -NoNewWindow
 $opened = $false
 for ($i = 0; $i -lt 60; $i++) {
