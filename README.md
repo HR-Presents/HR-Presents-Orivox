@@ -1,100 +1,96 @@
 <p align="center">
-  <img src="assets/orivox-logo.jpg" alt="HR-Presents ORIVOX" width="720">
+  <img src="assets/orivox-logo.jpg" alt="HR-Presents ORIVOX" width="420">
 </p>
 
-<h1 align="center">HR-Presents ORIVOX</h1>
-<p align="center"><strong>Private, local-first AI voice assistant for Windows.</strong></p>
+<h1 align="center">ORIVOX</h1>
+<p align="center"><strong>Private, local-first AI voice assistant by HR-Presents.</strong></p>
 
-ORIVOX is a locally deployed voice assistant by **HR-Presents**. Its core workflow is:
+ORIVOX is a Windows local web application. It runs its backend on your computer and opens the product interface in your browser at **http://127.0.0.1:8765** by default.
 
-**Microphone → Faster-Whisper → Local AI → Kokoro → Speaker**
+**Microphone → Faster-Whisper → Local AI (Ollama) → Kokoro → Speaker**
 
-Account data, profile information, settings, conversations and messages are stored locally in SQLite under the user's application data directory.
+Account data, profiles, settings, conversations and messages remain in local SQLite storage under the user's application data directory.
 
 ## Download ORIVOX
 
 ### Recommended — Windows Portable ZIP
 
-The primary end-user download is:
+The primary customer download is **`ORIVOX-Windows-Portable.zip`** from the latest GitHub release:
 
-**`ORIVOX-Windows-Portable.zip`**
-
-Download it from the latest GitHub release:
-
-**https://github.com/HR-Presents/HR-Presents-Orivox/releases/latest**
-
-Then:
+https://github.com/HR-Presents/HR-Presents-Orivox/releases/latest
 
 1. Download `ORIVOX-Windows-Portable.zip`.
-2. Extract the ZIP completely.
+2. Extract the ZIP completely into a new folder.
 3. Open the extracted ORIVOX folder.
-4. Double-click `ORIVOX.exe`.
-5. ORIVOX starts locally on the computer. No installer is required.
+4. Run `ORIVOX.exe`.
+5. ORIVOX starts its local server and opens the browser interface on `127.0.0.1`.
 
-Keep the extracted files together. `ORIVOX.exe` uses the bundled `ORIVOX-server.exe` and packaged runtime from the same folder.
+No Python or Node.js installation is required for the packaged portable build. Keep the extracted files together because the launcher uses the packaged local server and runtime from the same folder.
 
-An optional Windows installer is also published for users who prefer a traditional installation flow, but the **portable ZIP is the main ORIVOX distribution**.
+An installer may also be published for users who prefer installation, but the **portable ZIP is the recommended ORIVOX distribution**.
 
-If a release has not been published yet, project maintainers can download the newest validated portable build from the **ORIVOX Windows Desktop** workflow artifacts under GitHub Actions.
+## Latest experience
 
-## What ORIVOX includes
+The current ORIVOX release includes:
 
-- Local registration and login with hashed passwords
-- Persistent local user profiles
-- SQLite conversation and settings storage
-- Dynamic dashboard and history data
-- Faster-Whisper speech-to-text
-- Replaceable local conversational AI service layer
-- Ollama-backed default local AI model
-- Kokoro text-to-speech
-- Microphone recording and live audio visualization
-- Voice response playback and interruption controls
+- Premium responsive local web interface
+- Top navigation for Overview, Voice Assistant, Conversations, Profile, Settings and Help
+- HR-Presents / ORIVOX blue, slate and light visual system
+- Native UI brand mark and ORIVOX wordmark treatment
+- Dynamic local registration and login with hashed passwords
+- Persistent local profiles, conversations and settings
+- Faster-Whisper speech-to-text, including browser WebM/Opus microphone recordings
+- Ollama-backed local conversational AI using `qwen2.5:3b` by default
+- Automatic first-time Ollama model provisioning when the configured model is missing
+- Live model setup state, model name, download phase, bytes downloaded and percentage in the web interface
+- Kokoro local text-to-speech
+- Microphone recording, live audio visualization and voice playback controls
 - Light, dark and system appearance modes
-- Portable Windows desktop runtime
-- Separate packaged local server worker for reliable Windows startup
+- SQLite-backed local application data
+- Packaged Windows runtime with automated HTTP smoke testing
 
-## Architecture
+## First-time local AI setup
 
-- `orivox/app.py` — FastAPI application and local API
-- `orivox/db.py` — SQLite users, conversations, messages and settings
-- `orivox/services.py` — lazy-loaded Whisper, local AI and Kokoro runtime
-- `orivox/config.py` — portable environment-aware configuration
-- `web/` — responsive ORIVOX client
-- `desktop.py` — desktop launcher
-- `server.py` — packaged local server worker
-- `ORIVOX.spec` — PyInstaller desktop bundle definition
-- `installer/ORIVOX.iss` — optional Inno Setup installer
-- `run.py` — developer/local browser launcher
+ORIVOX uses Ollama for local conversational generation. The default model is **`qwen2.5:3b`**.
 
-The STT, conversational AI and TTS layers are separated so each component can be changed or upgraded independently.
+If the configured model is not already installed, ORIVOX can provision it through Ollama and exposes the download state to the website so first-time setup does not appear to be a frozen AI response. The interface can display the configured model, current setup phase, downloaded bytes, total bytes and percentage while the model is being pulled.
 
-## Windows requirements
-
-For the portable application itself:
-
-- Windows 10 or Windows 11 x64
-- Working microphone and audio output device
-- Enough free disk space for the ORIVOX package and locally downloaded models
-
-The packaged application includes its Python/runtime dependencies. Users do **not** need to install Python just to launch the portable ZIP.
-
-The default conversational model layer uses Ollama with `qwen2.5:3b`. ORIVOX does not currently bundle that model inside the portable ZIP, so the model must be available locally before normal AI conversations can run.
-
-## Local model setup
-
-Install Ollama and pull the default conversational model:
+Ollama runs locally at **http://127.0.0.1:11434** by default. If Ollama itself is not installed/running, install/start Ollama first. Advanced users can manually provision the model with:
 
 ```powershell
 ollama pull qwen2.5:3b
 ```
 
-ORIVOX then connects to the local Ollama service at `http://127.0.0.1:11434` by default.
+The model is intentionally not embedded inside the ORIVOX ZIP because local AI models are substantially larger than the application package.
 
-Faster-Whisper and Kokoro are loaded locally by the ORIVOX runtime. Expensive model components are initialized lazily so the UI can start without loading every AI model at application import time.
+## Architecture
+
+- `orivox/app.py` — FastAPI local application and API
+- `orivox/db.py` — SQLite users, conversations, messages and settings
+- `orivox/services.py` — lazy-loaded Whisper, Ollama and Kokoro services
+- `orivox/config.py` — portable environment-aware configuration
+- `web/` — responsive ORIVOX browser interface
+- `desktop.py` — packaged Windows launcher
+- `server.py` — packaged local HTTP server worker
+- `ORIVOX.spec` — PyInstaller bundle definition
+- `installer/ORIVOX.iss` — optional installer definition
+- `run.py` — developer/local browser launcher
+
+The speech recognition, conversational AI and speech synthesis layers are separated so each can be upgraded independently.
+
+## Windows requirements
+
+- Windows 10 or Windows 11 x64
+- Working microphone and audio output device for voice features
+- Ollama installed/running for local conversational AI
+- Internet access during first-time model download if the configured Ollama model is not already present
+- Sufficient free disk space for ORIVOX and locally downloaded AI models
+
+The packaged ORIVOX ZIP includes its Python/runtime dependencies. Users do not need to install Python just to launch it.
 
 ## Developer setup
 
-Python 3.11 is recommended for source development.
+Python 3.11 is recommended.
 
 ```powershell
 py -3.11 -m venv .venv
@@ -105,24 +101,15 @@ ollama pull qwen2.5:3b
 python run.py
 ```
 
-Open `http://127.0.0.1:8765` after the local server starts.
+Open **http://127.0.0.1:8765** after the server starts.
 
-For desktop development:
-
-```powershell
-pip install -r requirements-desktop.txt
-python desktop.py
-```
-
-## Build the Windows portable application
+## Build the Windows portable ZIP
 
 ```powershell
 .\scripts\build-windows.ps1
 ```
 
-The GitHub Actions **ORIVOX Windows Desktop** workflow performs automated application tests, builds the packaged Windows runtime, verifies both ORIVOX executables, smoke-tests the packaged HTTP application, creates the portable ZIP and optional installer, and uploads the resulting packages.
-
-On successful builds from `main`, the workflow publishes the validated portable ZIP to the GitHub Releases page so end users have one stable place to download ORIVOX.
+The **ORIVOX Windows Desktop** GitHub Actions workflow compiles the runtime, runs application tests, smoke-tests the packaged HTTP application, creates the portable ZIP, optionally creates the installer, uploads artifacts and publishes validated `main` builds to GitHub Releases.
 
 ## Local data and configuration
 
@@ -142,16 +129,16 @@ No developer-specific username, drive or absolute development path is required.
 
 ## Privacy
 
-ORIVOX is designed around a local-first workflow. Speech recognition, local conversational generation and voice synthesis are intended to execute on the user's computer. Raw microphone recordings are not permanently stored by the current API unless a future explicit storage feature is enabled.
+ORIVOX is designed around a local-first workflow. Speech recognition, conversational generation and voice synthesis are intended to execute on the user's computer. Raw browser microphone recordings are processed for transcription and are not permanently stored by the current API.
 
 ## Validation
 
-Automated tests cover application startup, registration/login, local profile updates, settings persistence, invalid recording handling and packaged runtime health. The Windows workflow additionally verifies the generated desktop executables before creating the downloadable packages.
+Automated tests cover startup, authentication, local profile/settings persistence, browser microphone transcription paths, model provisioning/progress state and other application behavior. Windows CI additionally validates the packaged local HTTP runtime before publishing customer packages.
 
-Physical microphone, speaker and model-performance behavior should still be validated on real Windows hardware before claiming a specific machine configuration is fully supported.
+Physical microphone, speaker, Ollama download speed and model performance still depend on the customer's Windows hardware and environment.
 
 ## Branding
 
-The official product name is **ORIVOX** and the parent brand is **HR-Presents**. The repository includes the official ORIVOX artwork under `assets/orivox-logo.jpg` and uses it as the project branding source of truth.
+The official product is **ORIVOX**, created by **HR-Presents**. Repository artwork is stored under `assets/`, while the current web interface renders its compact brand mark and wordmark natively for clean scaling inside the product UI.
 
 Copyright © 2026 **HR-Presents**. All rights reserved.
