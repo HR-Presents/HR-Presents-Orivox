@@ -1,0 +1,121 @@
+name: ORIVOX Local Web Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'orivox/**'
+      - 'web/**'
+      - 'assets/**'
+      - 'run.py'
+      - 'requirements.txt'
+      - 'Start ORIVOX.bat'
+      - 'README-FIRST.txt'
+      - 'scripts/bootstrap-local.ps1'
+      - '.github/workflows/local-web.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  package-local-web:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile sources
+        run: python -m compileall -q orivox run.py tests
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Validate local bootstrap script
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts\bootstrap-local.ps1'), [ref]$null, [ref]$null)
+          if (-not (Test-Path 'Start ORIVOX.bat')) { throw 'Start ORIVOX.bat missing' }
+          if (-not (Test-Path 'README-FIRST.txt')) { throw 'README-FIRST.txt missing' }
+
+      - name: Assemble local web package
+        shell: pwsh
+        run: |
+          $pkg = 'dist\ORIVOX-v1.0.2-Local-Web'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+          Copy-Item 'Start ORIVOX.bat' $pkg
+          Copy-Item 'README-FIRST.txt' $pkg
+          Copy-Item 'run.py' $pkg
+          Copy-Item 'requirements.txt' $pkg
+          Copy-Item 'orivox' "$pkg\orivox" -Recurse
+          Copy-Item 'web' "$pkg\web" -Recurse
+          Copy-Item 'assets' "$pkg\assets" -Recurse
+          New-Item -ItemType Directory -Force -Path "$pkg\scripts" | Out-Null
+          Copy-Item 'scripts\bootstrap-local.ps1' "$pkg\scripts\bootstrap-local.ps1"
+
+      - name: Create local web ZIP
+        shell: pwsh
+        run: Compress-Archive -Path 'dist\ORIVOX-v1.0.2-Local-Web\*' -DestinationPath 'dist\ORIVOX-v1.0.2-Local-Web.zip' -CompressionLevel Optimal
+
+      - name: Upload local web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORIVOX-v1.0.2-Local-Web
+          if-no-files-found: error
+          retention-days: 14
+          path: dist/ORIVOX-v1.0.2-Local-Web.zip
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v1.0.2'
+          $asset = 'dist\ORIVOX-v1.0.2-Local-Web.zip'
+          $notes = @'
+          HR-Presents ORIVOX v1.0.2 — Local Web Edition
+
+          PRIMARY DOWNLOAD: ORIVOX-v1.0.2-Local-Web.zip
+
+          This release behaves like a local website package rather than a desktop app.
+
+          First launch:
+          - extract the ZIP
+          - double-click Start ORIVOX.bat
+          - a visible terminal shows Python setup, dependency installation and Ollama/Qwen setup
+          - qwen2.5:3b download progress is shown directly by Ollama (percentage, size and speed)
+          - ORIVOX then opens at http://127.0.0.1:8765
+
+          Later launches reuse the installed environment and model and start much faster.
+          '@
+
+          function Invoke-GhRetry([scriptblock]$Command, [int]$Attempts = 5) {
+            for ($i = 1; $i -le $Attempts; $i++) {
+              & $Command
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($i -eq $Attempts) { throw "GitHub release command failed after $Attempts attempts." }
+              $delay = [Math]::Pow(2, $i)
+              Write-Host "GitHub release API failed; retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+          }
+
+          if (gh release view $tag 2>$null) {
+            Invoke-GhRetry { gh release upload $tag $asset --clobber }
+            gh release edit $tag --title 'HR-Presents ORIVOX v1.0.2 — Local Web Edition' --notes $notes --latest
+          } else {
+            Invoke-GhRetry { gh release create $tag $asset --title 'HR-Presents ORIVOX v1.0.2 — Local Web Edition' --notes $notes --latest --target "${{ github.sha }}" }
+          }
